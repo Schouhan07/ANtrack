@@ -4,3 +4,24 @@
 .env.*.local
 server/.env
 client/.env
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output (run `cd client && npm run build` before production)
+client/build/
+
+# Tool caches
+.cache/
+**/.cache/
+client/.eslintcache
+
+# Logs & debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
