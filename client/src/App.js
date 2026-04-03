@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast';
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
-import Overview from './pages/Overview';
 import BulkUpload from './pages/BulkUpload';
 import VideoDetail from './pages/VideoDetail';
 import VideosList from './pages/VideosList';
@@ -39,7 +38,7 @@ function App() {
         <main className="main-content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/overview" element={<Overview />} />
+            <Route path="/overview" element={<Navigate to="/" replace />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/campaigns" element={<CampaignManager />} />
             <Route path="/videos" element={<VideosList />} />

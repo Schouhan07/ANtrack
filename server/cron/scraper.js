@@ -91,6 +91,7 @@ async function saveResults(results, normaliseFn, idToVideo, creatorMap = null) {
       likes: m.likes,
       shares: m.shares,
       saves: m.saves,
+      comments: Math.max(0, Number(m.comments) || 0),
       viral,
     });
 

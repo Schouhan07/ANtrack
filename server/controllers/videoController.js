@@ -1,5 +1,17 @@
 const Video = require('../models/Video');
 const VideoMetric = require('../models/VideoMetric');
+const { buildVideoCreatePayload } = require('../utils/videoPayload');
+
+// GET /api/videos/:id – single video (for detail page when no metrics yet)
+exports.getVideoById = async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id).lean();
+    if (!video) return res.status(404).json({ error: 'Not found' });
+    res.json(video);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 
 // GET /api/videos – list all tracked videos
 exports.getVideos = async (req, res) => {
@@ -24,22 +36,10 @@ function normaliseInitiatedBy(v) {
 // POST /api/videos – add a single video
 exports.addVideo = async (req, res) => {
   try {
-    const { url, creator, campaign, platform, initiatedBy } = req.body;
-    if (!url) return res.status(400).json({ error: 'url is required' });
-
-    const { offerCode, sales } = req.body;
-    const payload = {
-      url,
-      creator,
-      campaign,
-      platform,
-      initiatedBy: normaliseInitiatedBy(initiatedBy),
-    };
-    if (offerCode != null && String(offerCode).trim()) payload.offerCode = String(offerCode).trim();
-    if (sales !== undefined && sales !== '' && sales !== null) {
-      const n = Number(sales);
-      if (!Number.isNaN(n)) payload.sales = n;
-    }
+    const payload = buildVideoCreatePayload(req.body, {
+      defaultInitiatedBy: normaliseInitiatedBy(req.body.initiatedBy),
+    });
+    if (!payload) return res.status(400).json({ error: 'url is required' });
     const video = await Video.create(payload);
     res.status(201).json(video);
   } catch (err) {
@@ -65,25 +65,10 @@ exports.addBulkVideos = async (req, res) => {
     for (const entry of urls) {
       try {
         const raw = typeof entry === 'string' ? { url: entry } : entry;
-        if (!raw.url) continue;
-        const rowInit =
-          raw.initiatedBy === 'supply' || raw.initiatedBy === 'brand'
-            ? raw.initiatedBy
-            : defaultInit;
-        const createPayload = {
-          url: String(raw.url).trim(),
-          creator: raw.creator != null ? String(raw.creator).trim() : '',
-          campaign: raw.campaign != null ? String(raw.campaign).trim() : '',
-          platform: raw.platform,
-          initiatedBy: rowInit,
-        };
-        if (raw.offerCode != null && String(raw.offerCode).trim()) {
-          createPayload.offerCode = String(raw.offerCode).trim();
-        }
-        if (raw.sales !== undefined && raw.sales !== null && raw.sales !== '') {
-          const n = Number(raw.sales);
-          if (!Number.isNaN(n)) createPayload.sales = n;
-        }
+        const createPayload = buildVideoCreatePayload(raw, {
+          defaultInitiatedBy: defaultInit,
+        });
+        if (!createPayload) continue;
         await Video.create(createPayload);
         results.added++;
       } catch (err) {
@@ -124,21 +109,58 @@ function platformFromUrl(u) {
 // PATCH /api/videos/:id – partial update (url, creator, campaign, offerCode, sales, initiatedBy, …)
 exports.updateVideo = async (req, res) => {
   try {
-    const allowed = ['creator', 'campaign', 'offerCode', 'sales', 'initiatedBy', 'url'];
+    const allowed = [
+      'creator',
+      'campaign',
+      'offerCode',
+      'sales',
+      'initiatedBy',
+      'url',
+      'platform',
+      'createdBy',
+      'publishDate',
+      'influencerName',
+      'influencerHandle',
+      'lob',
+      'videoDuration',
+      'totalCost',
+    ];
     const patch = {};
     for (const k of allowed) {
       if (!(k in req.body)) continue;
-      if (k === 'sales') {
+      if (k === 'sales' || k === 'totalCost') {
         const v = req.body[k];
-        patch[k] = v === '' || v === null ? null : Number(v);
+        if (v === '' || v === null) {
+          patch[k] = null;
+        } else {
+          const n = Number(v);
+          if (!Number.isNaN(n)) patch[k] = n;
+        }
       } else if (k === 'url') {
         const u = String(req.body[k]).trim();
         if (!u) return res.status(400).json({ error: 'url cannot be empty' });
         patch.url = u;
         patch.platform = platformFromUrl(u);
+      } else if (k === 'platform') {
+        const p = String(req.body[k] || '').trim().toLowerCase();
+        if (p === 'instagram' || p === 'tiktok' || p === 'unknown') patch.platform = p;
       } else if (k === 'initiatedBy') {
         patch[k] = normaliseInitiatedBy(req.body[k]);
-      } else if (k === 'campaign') {
+      } else if (k === 'publishDate') {
+        const v = req.body[k];
+        patch[k] = v === '' || v == null ? null : new Date(v);
+        if (patch[k] && Number.isNaN(patch[k].getTime())) {
+          return res.status(400).json({ error: 'Invalid publishDate' });
+        }
+      } else if (k === 'campaign' || k === 'creator' || k === 'offerCode') {
+        patch[k] = req.body[k] != null ? String(req.body[k]).trim() : '';
+      } else if (
+        k === 'createdBy' ||
+        k === 'influencerName' ||
+        k === 'influencerHandle' ||
+        k === 'lob' ||
+        k === 'videoDuration'
+      ) {
         patch[k] = req.body[k] != null ? String(req.body[k]).trim() : '';
       } else {
         patch[k] = req.body[k];

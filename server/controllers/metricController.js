@@ -61,7 +61,10 @@ exports.getMetrics = async (req, res) => {
 
     const metrics = await VideoMetric.find(filter)
       .sort({ scrapedAt: -1 })
-      .populate('videoId', 'url creator campaign platform initiatedBy');
+      .populate(
+        'videoId',
+        'url creator campaign platform initiatedBy offerCode sales addedDate status createdBy publishDate influencerName influencerHandle lob videoDuration totalCost'
+      );
 
     res.json(metrics);
   } catch (err) {
@@ -172,18 +175,40 @@ exports.getCampaignOverview = async (req, res) => {
           likes: { $first: '$likes' },
           shares: { $first: '$shares' },
           saves: { $first: '$saves' },
+          comments: { $first: { $ifNull: ['$comments', 0] } },
         },
       },
     ]);
 
+    const portfolio = await computePortfolioRunComparison();
+
     const totalVideos = videos.length;
-    const totalViews = latest.reduce((s, m) => s + m.views, 0);
-    const totalLikes = latest.reduce((s, m) => s + m.likes, 0);
-    const totalShares = latest.reduce((s, m) => s + m.shares, 0);
-    const totalSaves = latest.reduce((s, m) => s + m.saves, 0);
-    const totalEngagement = totalLikes + totalShares + totalSaves;
-    const avgEngagementRate =
-      totalViews > 0 ? ((totalEngagement / totalViews) * 100).toFixed(2) : 0;
+
+    let totalViews;
+    let totalLikes;
+    let totalShares;
+    let totalSaves;
+    let avgEngagementRate;
+
+    if (portfolio.latest && portfolio.latest.views != null) {
+      totalViews = portfolio.latest.views;
+      totalLikes = portfolio.latest.likes;
+      totalShares = portfolio.latest.shares;
+      totalSaves = portfolio.latest.saves;
+      const comments = portfolio.latest.comments || 0;
+      const eng = totalLikes + totalShares + totalSaves + comments;
+      avgEngagementRate =
+        totalViews > 0 ? ((eng / totalViews) * 100).toFixed(2) : '0.00';
+    } else {
+      totalViews = latest.reduce((s, m) => s + m.views, 0);
+      totalLikes = latest.reduce((s, m) => s + m.likes, 0);
+      totalShares = latest.reduce((s, m) => s + m.shares, 0);
+      totalSaves = latest.reduce((s, m) => s + m.saves, 0);
+      const totalComments = latest.reduce((s, m) => s + (m.comments || 0), 0);
+      const totalEngagement = totalLikes + totalShares + totalSaves + totalComments;
+      avgEngagementRate =
+        totalViews > 0 ? ((totalEngagement / totalViews) * 100).toFixed(2) : 0;
+    }
 
     let topInfluencer = null;
     const videoById = {};
@@ -192,7 +217,7 @@ exports.getCampaignOverview = async (req, res) => {
     for (const m of latest) {
       const v = videoById[m._id?.toString()];
       if (!v) continue;
-      const c = v.creator || 'Unknown';
+      const c = v.influencerName || v.creator || 'Unknown';
       if (!creatorStats[c]) creatorStats[c] = { views: 0 };
       creatorStats[c].views += m.views;
     }
@@ -201,27 +226,11 @@ exports.getCampaignOverview = async (req, res) => {
       topInfluencer = { name: topEntry[0], views: topEntry[1].views };
     }
 
-    const now = new Date();
-    const last7 = new Date(now);
-    last7.setDate(last7.getDate() - 7);
-    const prev7Start = new Date(now);
-    prev7Start.setDate(prev7Start.getDate() - 14);
-
-    const [thisWeekAgg, lastWeekAgg] = await Promise.all([
-      VideoMetric.aggregate([
-        { $match: { scrapedAt: { $gte: last7 } } },
-        { $group: { _id: null, v: { $sum: '$views' } } },
-      ]),
-      VideoMetric.aggregate([
-        { $match: { scrapedAt: { $gte: prev7Start, $lt: last7 } } },
-        { $group: { _id: null, v: { $sum: '$views' } } },
-      ]),
-    ]);
-    const tw = thisWeekAgg[0]?.v || 0;
-    const lw = lastWeekAgg[0]?.v || 0;
+    /** Same basis as Summary / dashboard-kpis: latest vs previous scrape (% change on portfolio views). */
     let wowGrowth = null;
-    if (lw > 0) wowGrowth = Number((((tw - lw) / lw) * 100).toFixed(1));
-    else if (tw > 0) wowGrowth = 100;
+    if (portfolio.pctChange && portfolio.pctChange.views != null && portfolio.pctChange.views !== '') {
+      wowGrowth = Number(portfolio.pctChange.views);
+    }
 
     res.json({
       totalVideos,
@@ -422,106 +431,185 @@ exports.getDailyBreakdown = async (req, res) => {
  * Portfolio totals: sum of each active video's latest scrape vs second-latest (new run − last run).
  * Only videos with ≥2 metric rows are included so both sums are comparable.
  */
-exports.getPortfolioRunComparison = async (req, res) => {
-  try {
-    const activeVideos = await Video.find({ status: 'active' }).select('_id').lean();
-    const ids = activeVideos.map((v) => v._id);
-    if (ids.length === 0) {
-      return res.json({
-        latest: null,
-        previous: null,
-        pctChange: null,
-        videosCompared: 0,
-        activeVideos: 0,
-      });
-    }
+async function computePortfolioRunComparison() {
+  const activeVideos = await Video.find({ status: 'active' }).select('_id').lean();
+  const ids = activeVideos.map((v) => v._id);
+  if (ids.length === 0) {
+    return {
+      latest: null,
+      previous: null,
+      pctChange: null,
+      videosCompared: 0,
+      activeVideos: 0,
+    };
+  }
 
-    const rolled = await VideoMetric.aggregate([
-      { $match: { videoId: { $in: ids } } },
-      { $sort: { scrapedAt: -1 } },
-      {
-        $group: {
-          _id: '$videoId',
-          metrics: {
-            $push: {
-              views: '$views',
-              likes: '$likes',
-              shares: '$shares',
-              saves: '$saves',
-              scrapedAt: '$scrapedAt',
-            },
+  const rolled = await VideoMetric.aggregate([
+    { $match: { videoId: { $in: ids } } },
+    { $sort: { scrapedAt: -1 } },
+    {
+      $group: {
+        _id: '$videoId',
+        metrics: {
+          $push: {
+            views: '$views',
+            likes: '$likes',
+            shares: '$shares',
+            saves: '$saves',
+            comments: { $ifNull: ['$comments', 0] },
+            scrapedAt: '$scrapedAt',
           },
         },
       },
-      {
-        $project: {
-          latest: { $arrayElemAt: ['$metrics', 0] },
-          previous: { $arrayElemAt: ['$metrics', 1] },
-        },
+    },
+    {
+      $project: {
+        latest: { $arrayElemAt: ['$metrics', 0] },
+        previous: { $arrayElemAt: ['$metrics', 1] },
       },
-      { $match: { previous: { $ne: null } } },
-      {
-        $group: {
-          _id: null,
-          sumLatestViews: { $sum: '$latest.views' },
-          sumLatestLikes: { $sum: '$latest.likes' },
-          sumLatestShares: { $sum: '$latest.shares' },
-          sumLatestSaves: { $sum: '$latest.saves' },
-          sumPrevViews: { $sum: '$previous.views' },
-          sumPrevLikes: { $sum: '$previous.likes' },
-          sumPrevShares: { $sum: '$previous.shares' },
-          sumPrevSaves: { $sum: '$previous.saves' },
-          maxLatestAt: { $max: '$latest.scrapedAt' },
-          maxPrevAt: { $max: '$previous.scrapedAt' },
-          videosCompared: { $sum: 1 },
-        },
+    },
+    { $match: { previous: { $ne: null } } },
+    {
+      $group: {
+        _id: null,
+        sumLatestViews: { $sum: '$latest.views' },
+        sumLatestLikes: { $sum: '$latest.likes' },
+        sumLatestShares: { $sum: '$latest.shares' },
+        sumLatestSaves: { $sum: '$latest.saves' },
+        sumLatestComments: { $sum: '$latest.comments' },
+        sumPrevViews: { $sum: '$previous.views' },
+        sumPrevLikes: { $sum: '$previous.likes' },
+        sumPrevShares: { $sum: '$previous.shares' },
+        sumPrevSaves: { $sum: '$previous.saves' },
+        sumPrevComments: { $sum: '$previous.comments' },
+        maxLatestAt: { $max: '$latest.scrapedAt' },
+        maxPrevAt: { $max: '$previous.scrapedAt' },
+        videosCompared: { $sum: 1 },
       },
+    },
+  ]);
+
+  const pctFor = (a, b) => {
+    const prev = nonNeg(b);
+    if (prev <= 0) return null;
+    return (((nonNeg(a) - prev) / prev) * 100).toFixed(1);
+  };
+
+  if (!rolled.length) {
+    return {
+      latest: null,
+      previous: null,
+      pctChange: null,
+      videosCompared: 0,
+      activeVideos: ids.length,
+    };
+  }
+
+  const r = rolled[0];
+  const latest = {
+    views: nonNeg(r.sumLatestViews),
+    likes: nonNeg(r.sumLatestLikes),
+    shares: nonNeg(r.sumLatestShares),
+    saves: nonNeg(r.sumLatestSaves),
+    comments: nonNeg(r.sumLatestComments),
+    scrapedAt: r.maxLatestAt,
+  };
+  const previous = {
+    views: nonNeg(r.sumPrevViews),
+    likes: nonNeg(r.sumPrevLikes),
+    shares: nonNeg(r.sumPrevShares),
+    saves: nonNeg(r.sumPrevSaves),
+    comments: nonNeg(r.sumPrevComments),
+    scrapedAt: r.maxPrevAt,
+  };
+
+  return {
+    latest,
+    previous,
+    pctChange: {
+      views: pctFor(latest.views, previous.views),
+      likes: pctFor(latest.likes, previous.likes),
+      shares: pctFor(latest.shares, previous.shares),
+      saves: pctFor(latest.saves, previous.saves),
+      comments: pctFor(latest.comments, previous.comments),
+    },
+    videosCompared: r.videosCompared,
+    activeVideos: ids.length,
+  };
+}
+
+exports.getPortfolioRunComparison = async (req, res) => {
+  try {
+    const data = await computePortfolioRunComparison();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * GET /api/metrics/dashboard-kpis — hero stats for Dashboard (portfolio growth, costs, sales).
+ */
+exports.getDashboardKpis = async (req, res) => {
+  try {
+    const portfolio = await computePortfolioRunComparison();
+    const now = new Date();
+    const last7 = new Date(now);
+    last7.setDate(last7.getDate() - 7);
+    const prev7Start = new Date(now);
+    prev7Start.setDate(prev7Start.getDate() - 14);
+
+    const [videosNewLast7d, videosNewPrior7d, costRow] = await Promise.all([
+      Video.countDocuments({ status: 'active', addedDate: { $gte: last7 } }),
+      Video.countDocuments({
+        status: 'active',
+        addedDate: { $gte: prev7Start, $lt: last7 },
+      }),
+      Video.aggregate([
+        { $match: { status: 'active' } },
+        {
+          $group: {
+            _id: null,
+            totalCost: { $sum: { $ifNull: ['$totalCost', 0] } },
+            totalSales: { $sum: { $ifNull: ['$sales', 0] } },
+            withSales: {
+              $sum: {
+                $cond: [{ $gt: [{ $ifNull: ['$sales', 0] }, 0] }, 1, 0],
+              },
+            },
+          },
+        },
+      ]),
     ]);
 
-    const nonNeg = (n) => Math.max(0, Number(n) || 0);
-    const pctFor = (a, b) => {
-      const prev = nonNeg(b);
-      if (prev <= 0) return null;
-      return (((nonNeg(a) - prev) / prev) * 100).toFixed(1);
-    };
+    const totalCost = costRow[0]?.totalCost ?? 0;
+    const transactionsTotal = costRow[0]?.totalSales ?? 0;
+    const transactionsVideos = costRow[0]?.withSales ?? 0;
 
-    if (!rolled.length) {
-      return res.json({
-        latest: null,
-        previous: null,
-        pctChange: null,
-        videosCompared: 0,
-        activeVideos: ids.length,
-      });
+    let payPerView = null;
+    let avgEngagementPct = null;
+    if (portfolio.latest && portfolio.latest.views > 0) {
+      const eng =
+        portfolio.latest.likes +
+        portfolio.latest.shares +
+        portfolio.latest.saves +
+        (portfolio.latest.comments || 0);
+      avgEngagementPct = ((eng / portfolio.latest.views) * 100).toFixed(2);
+      if (totalCost > 0) {
+        payPerView = totalCost / portfolio.latest.views;
+      }
     }
 
-    const r = rolled[0];
-    const latest = {
-      views: nonNeg(r.sumLatestViews),
-      likes: nonNeg(r.sumLatestLikes),
-      shares: nonNeg(r.sumLatestShares),
-      saves: nonNeg(r.sumLatestSaves),
-      scrapedAt: r.maxLatestAt,
-    };
-    const previous = {
-      views: nonNeg(r.sumPrevViews),
-      likes: nonNeg(r.sumPrevLikes),
-      shares: nonNeg(r.sumPrevShares),
-      saves: nonNeg(r.sumPrevSaves),
-      scrapedAt: r.maxPrevAt,
-    };
-
     res.json({
-      latest,
-      previous,
-      pctChange: {
-        views: pctFor(latest.views, previous.views),
-        likes: pctFor(latest.likes, previous.likes),
-        shares: pctFor(latest.shares, previous.shares),
-        saves: pctFor(latest.saves, previous.saves),
-      },
-      videosCompared: r.videosCompared,
-      activeVideos: ids.length,
+      totalVideosActive: portfolio.activeVideos,
+      videosNewLast7d,
+      videosNewPrior7d,
+      portfolio,
+      avgEngagementPct,
+      payPerView,
+      totalCost,
+      transactionsTotal,
+      transactionsVideos,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -550,7 +638,7 @@ exports.getTopCreators = async (req, res) => {
     for (const m of latest) {
       const v = videoMap[m._id?.toString()];
       if (!v) continue;
-      const c = v.creator || 'Unknown';
+      const c = v.influencerName || v.creator || 'Unknown';
       if (!creatorStats[c]) creatorStats[c] = { views: 0, likes: 0, videos: 0 };
       creatorStats[c].views += m.views;
       creatorStats[c].likes += m.likes;

@@ -2,7 +2,6 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   FiHome,
-  FiBarChart2,
   FiUpload,
   FiList,
   FiActivity,
@@ -26,11 +25,6 @@ export default function Navbar() {
       <NavLink to="/" className={({ isActive }) => (isActive ? 'active' : '')} end>
         <FiHome size={18} />
         Dashboard
-      </NavLink>
-
-      <NavLink to="/overview" className={({ isActive }) => (isActive ? 'active' : '')}>
-        <FiBarChart2 size={18} />
-        Overview
       </NavLink>
 
       <NavLink to="/analytics" className={({ isActive }) => (isActive ? 'active' : '')}>

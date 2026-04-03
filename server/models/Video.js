@@ -17,6 +17,42 @@ const videoSchema = new mongoose.Schema({
     default: '',
     trim: true,
   },
+  /** Person or team that created / logged this entry */
+  createdBy: {
+    type: String,
+    default: '',
+    trim: true,
+  },
+  /** When the post was published (optional) */
+  publishDate: {
+    type: Date,
+    default: null,
+  },
+  influencerName: {
+    type: String,
+    default: '',
+    trim: true,
+  },
+  influencerHandle: {
+    type: String,
+    default: '',
+    trim: true,
+  },
+  /** Line of business */
+  lob: {
+    type: String,
+    default: '',
+    trim: true,
+  },
+  videoDuration: {
+    type: String,
+    default: '',
+    trim: true,
+  },
+  totalCost: {
+    type: Number,
+    default: null,
+  },
   campaign: {
     type: String,
     default: '',

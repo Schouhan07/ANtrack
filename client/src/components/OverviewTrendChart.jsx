@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   LineChart,
   Line,
@@ -7,27 +7,59 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts';
 import { fetchWeeklyTrend } from '../services/api';
 
+/** Chart strokes (Recharts needs explicit colors) */
+const CHART = {
+  primary: '#a78bfa',
+  secondary: '#38bdf8',
+  grid: '#334155',
+  axis: '#94a3b8',
+  tooltipBg: '#0f172a',
+  tooltipBorder: '#475569',
+};
+
+function formatNumber(num) {
+  const n = Number(num) || 0;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(Math.round(n));
+}
+
+/** val is 0–1 engagement rate */
+function formatPercent(val) {
+  return `${((Number(val) || 0) * 100).toFixed(1)}%`;
+}
+
 export default function OverviewTrendChart({ weeks = 8 }) {
-  const [data, setData] = useState([]);
+  const [raw, setRaw] = useState([]);
 
   useEffect(() => {
     fetchWeeklyTrend(weeks)
-      .then((res) => setData(res.data))
+      .then((res) => setRaw(res.data || []))
       .catch(console.error);
   }, [weeks]);
 
-  if (data.length === 0) {
+  const data = useMemo(
+    () =>
+      raw.map((d) => ({
+        ...d,
+        engagementRate: d.views > 0 ? d.engagement / d.views : 0,
+      })),
+    [raw]
+  );
+
+  if (raw.length === 0) {
     return (
-      <div className="card card-chart">
-        <div className="card-header">
-          <h2>Views &amp; engagement trend</h2>
-          <span className="muted-caption">Last {weeks} weeks</span>
+      <div className="overview-trend-chart">
+        <div className="overview-trend-chart__head">
+          <h2 className="overview-trend-chart__title">Trend analysis</h2>
+          <p className="overview-trend-chart__lead">
+            Views vs engagement rate (last {weeks} weeks)
+          </p>
         </div>
-        <div className="empty-state empty-state--soft">
+        <div className="overview-trend-chart__empty empty-state empty-state--soft">
           <span className="empty-state-icon" aria-hidden>
             📈
           </span>
@@ -38,55 +70,93 @@ export default function OverviewTrendChart({ weeks = 8 }) {
   }
 
   return (
-    <div className="card card-chart">
-      <div className="card-header">
-        <h2>Views &amp; engagement trend</h2>
-        <span className="muted-caption">Last {weeks} weeks (by scrape activity)</span>
+    <div className="overview-trend-chart">
+      <div className="overview-trend-chart__head">
+        <h2 className="overview-trend-chart__title">Trend analysis</h2>
+        <p className="overview-trend-chart__lead">
+          Views vs engagement rate (last {weeks} weeks, by scrape activity)
+        </p>
+        <div className="overview-trend-chart__legend" aria-hidden>
+          <span className="overview-trend-chart__legend-item">
+            <span className="overview-trend-chart__swatch overview-trend-chart__swatch--primary" />
+            Views
+          </span>
+          <span className="overview-trend-chart__legend-item">
+            <span className="overview-trend-chart__swatch overview-trend-chart__swatch--dashed" />
+            Engagement rate
+          </span>
+        </div>
       </div>
-      <ResponsiveContainer width="100%" height={320}>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e8ecf1" />
-          <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-          <YAxis
-            yAxisId="left"
-            tick={{ fontSize: 12 }}
-            tickFormatter={(v) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}k` : v)}
-          />
-          <YAxis
-            yAxisId="right"
-            orientation="right"
-            tick={{ fontSize: 12 }}
-            tickFormatter={(v) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}k` : v)}
-          />
-          <Tooltip
-            formatter={(value, name) => [
-              typeof value === 'number' ? value.toLocaleString() : value,
-              name === 'views' ? 'Views' : 'Engagement',
-            ]}
-          />
-          <Legend
-            formatter={(value) => (value === 'views' ? 'Views' : 'Engagement (likes + shares + saves)')}
-          />
-          <Line
-            yAxisId="left"
-            type="monotone"
-            dataKey="views"
-            stroke="#f43f5e"
-            strokeWidth={2.5}
-            dot={{ r: 3 }}
-            activeDot={{ r: 5 }}
-          />
-          <Line
-            yAxisId="right"
-            type="monotone"
-            dataKey="engagement"
-            stroke="#6366f1"
-            strokeWidth={2.5}
-            dot={{ r: 3 }}
-            activeDot={{ r: 5 }}
-          />
-        </LineChart>
-      </ResponsiveContainer>
+
+      <div className="overview-trend-chart__plot">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
+            <XAxis
+              dataKey="label"
+              stroke={CHART.axis}
+              tick={{ fontSize: 12, fill: CHART.axis }}
+              tickLine={false}
+              axisLine={{ stroke: CHART.grid }}
+            />
+            <YAxis
+              yAxisId="left"
+              stroke={CHART.axis}
+              tick={{ fontSize: 12, fill: CHART.axis }}
+              tickFormatter={formatNumber}
+              tickLine={false}
+              axisLine={{ stroke: CHART.grid }}
+              width={48}
+            />
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              stroke={CHART.axis}
+              tick={{ fontSize: 12, fill: CHART.axis }}
+              tickFormatter={formatPercent}
+              tickLine={false}
+              axisLine={{ stroke: CHART.grid }}
+              width={52}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: CHART.tooltipBg,
+                border: `1px solid ${CHART.tooltipBorder}`,
+                borderRadius: '10px',
+                color: '#e2e8f0',
+              }}
+              labelStyle={{ color: '#94a3b8', fontWeight: 600 }}
+              formatter={(value, name) => {
+                if (name === 'views') return [formatNumber(value), 'Views'];
+                if (name === 'engagementRate') return [formatPercent(value), 'Engagement rate'];
+                return [value, name];
+              }}
+              labelFormatter={(label) => String(label)}
+            />
+            <Line
+              yAxisId="left"
+              type="monotone"
+              dataKey="views"
+              name="views"
+              stroke={CHART.primary}
+              strokeWidth={3}
+              dot={false}
+              activeDot={{ r: 5, strokeWidth: 0 }}
+            />
+            <Line
+              yAxisId="right"
+              type="monotone"
+              dataKey="engagementRate"
+              name="engagementRate"
+              stroke={CHART.secondary}
+              strokeWidth={2}
+              strokeDasharray="5 5"
+              dot={false}
+              activeDot={{ r: 4, strokeWidth: 0 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

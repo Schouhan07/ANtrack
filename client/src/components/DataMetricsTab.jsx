@@ -172,7 +172,7 @@ export default function DataMetricsTab() {
             <h2>Growth comparison</h2>
             <p className="muted-caption">
               7-day or 14-day window only. Each point = one daily portfolio total (latest scrape per
-              video that day). Same scale as Overview — not a sum across days.
+              video that day). Same scale as Dashboard — not a sum across days.
             </p>
           </div>
           <div className="data-metrics-range">

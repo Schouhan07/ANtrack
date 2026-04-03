@@ -9,6 +9,7 @@ const API = axios.create({ baseURL });
 
 // ── Videos ──────────────────────────────────────
 export const fetchVideos = (params) => API.get('/videos', { params });
+export const fetchVideoById = (id) => API.get(`/videos/${id}`);
 export const addVideo = (data) => API.post('/videos', data);
 /** Pass an array of URL entries, or { urls, initiatedBy?: 'brand'|'supply' } */
 export const addBulkVideos = (payload) =>
@@ -36,6 +37,7 @@ export const fetchDailyBreakdown = (days) =>
 /** Latest vs previous scrape totals (active videos with 2+ scrapes each) */
 export const fetchPortfolioRunComparison = () =>
   API.get('/metrics/portfolio-run-comparison');
+export const fetchDashboardKpis = () => API.get('/metrics/dashboard-kpis');
 export const fetchTopCreators = () => API.get('/metrics/top-creators');
 export const fetchInfluencerInsights = () => API.get('/metrics/influencers');
 export const triggerScrape = () => API.post('/metrics/scrape-now');

@@ -1,5 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import toast from 'react-hot-toast';
+import { FiSearch, FiDownload, FiTrendingUp } from 'react-icons/fi';
 import { fetchInfluencerInsights } from '../services/api';
 
 function TierDot({ tier }) {
@@ -133,11 +135,47 @@ function DrilldownPanel({ row, onClose }) {
   return createPortal(panel, document.body);
 }
 
+function CreatorAvatar({ name }) {
+  const initials = String(name || '?')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+  return <div className="creators-ecosystem-avatar">{initials || '?'}</div>;
+}
+
+const FAV_KEY = 'antrack-creator-favorites';
+
+function loadFavoriteSet() {
+  try {
+    const raw = localStorage.getItem(FAV_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveFavoriteSet(set) {
+  try {
+    localStorage.setItem(FAV_KEY, JSON.stringify([...set]));
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function InfluencerInsightsTab() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [search, setSearch] = useState('');
+  const [segment, setSegment] = useState('all');
+  const [favorites, setFavorites] = useState(() => loadFavoriteSet());
 
   const load = useCallback(() => {
     setLoading(true);
@@ -152,13 +190,102 @@ export default function InfluencerInsightsTab() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const onUp = () => load();
+    window.addEventListener('videos-updated', onUp);
+    return () => window.removeEventListener('videos-updated', onUp);
+  }, [load]);
+
+  const kpis = useMemo(() => {
+    if (!rows.length) {
+      return { creators: 0, portfolioViews: 0, avgEng: 0 };
+    }
+    const portfolioViews = rows.reduce(
+      (s, r) => s + (r.avgViews || 0) * (r.videoCount || 0),
+      0
+    );
+    const avgEng =
+      rows.reduce((s, r) => s + (r.engagementPct || 0), 0) / rows.length;
+    return {
+      creators: rows.length,
+      portfolioViews,
+      avgEng: Number(avgEng.toFixed(2)),
+    };
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    let r = rows;
+    const q = search.trim().toLowerCase();
+    if (q) {
+      r = r.filter(
+        (row) =>
+          (row.name || '').toLowerCase().includes(q) ||
+          (row.offerCodes || '').toLowerCase().includes(q)
+      );
+    }
+    if (segment === 'favorites') {
+      r = r.filter((row) => favorites.has(row.name));
+    }
+    return r;
+  }, [rows, search, segment, favorites]);
+
+  const toggleFavorite = (e, name) => {
+    e.stopPropagation();
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      saveFavoriteSet(next);
+      return next;
+    });
+  };
+
+  const exportCsv = () => {
+    if (!filteredRows.length) {
+      toast.error('No rows to export');
+      return;
+    }
+    const headers = [
+      'influencer',
+      'offer_codes',
+      'videos',
+      'avg_views',
+      'engagement_pct',
+      'sales',
+    ];
+    const lines = filteredRows.map((row) => {
+      const name = String(row.name || '').replace(/"/g, '""');
+      const codes = String(row.offerCodes || '').replace(/"/g, '""');
+      const sales =
+        row.sales != null ? row.sales : '';
+      return `"${name}","${codes}",${row.videoCount},${row.avgViews},${row.engagementPct},${sales}`;
+    });
+    const csv = [headers.join(','), ...lines].join('\n');
+    const blob = new Blob([csv], {
+      type: 'text/csv;charset=utf-8',
+    });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `creators-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast.success('CSV downloaded');
+  };
+
   if (loading) {
     return (
-      <div className="card influencer-table-card">
-        <div className="influencer-table-skeleton">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="influencer-skel-row" />
+      <div className="creators-ecosystem">
+        <div className="creators-ecosystem-kpis">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="stat-card stat-card-skeleton" aria-hidden />
           ))}
+        </div>
+        <div className="card influencer-table-card">
+          <div className="influencer-table-skeleton">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="influencer-skel-row" />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -166,104 +293,192 @@ export default function InfluencerInsightsTab() {
 
   if (error) {
     return (
-      <div className="card influencer-table-card">
+      <div className="creators-ecosystem">
         <p className="influencer-error">{error}</p>
       </div>
     );
   }
 
-  if (rows.length === 0) {
-    return (
-      <div className="card influencer-table-card">
-        <div className="empty-state empty-state--soft">
-          <span className="empty-state-icon" aria-hidden>
-            👤
-          </span>
-          <p>No influencers yet — add videos with creator names and scrape.</p>
+  return (
+    <div className="creators-ecosystem">
+      <div className="creators-ecosystem-header">
+        <div>
+          <h2 className="creators-ecosystem-title">Creator ecosystem</h2>
+          <p className="creators-ecosystem-lead">
+            Manage and analyze your network of talent. Offer codes &amp; sales merge from videos and{' '}
+            <strong>Offer maps</strong>.
+          </p>
+        </div>
+        <div className="creators-ecosystem-header-actions">
+          <button type="button" className="btn btn-secondary creators-ecosystem-btn" onClick={exportCsv}>
+            <FiDownload size={16} />
+            Export talent list
+          </button>
         </div>
       </div>
-    );
-  }
 
-  return (
-    <>
-      <div className="card influencer-table-card">
-        <div className="card-header influencer-table-header">
-          <div>
-            <h2>Influencers</h2>
-            <p className="influencer-table-lead">
-              Click a row for profile, performance, and recommended actions. Offer codes &amp; sales
-              merge from per-video data and from the <strong>Offer maps</strong> sidebar page (unique
-              codes). Colors reflect automated benchmarks.
-            </p>
+      <div className="creators-ecosystem-kpis stats-row">
+        <div className="stat-card stat-card--compact stat-card--videos">
+          <div className="stat-card-accent" aria-hidden />
+          <div className="label">Active creators</div>
+          <div className="value">{kpis.creators.toLocaleString()}</div>
+        </div>
+        <div className="stat-card stat-card--compact stat-card--views">
+          <div className="stat-card-accent" aria-hidden />
+          <div className="label">Portfolio views</div>
+          <div className="value">{kpis.portfolioViews.toLocaleString()}</div>
+          <div className="stat-sub">Σ (avg views × videos)</div>
+        </div>
+        <div className="stat-card stat-card--compact stat-card--engagement">
+          <div className="stat-card-accent" aria-hidden />
+          <div className="label">Avg engagement</div>
+          <div className="value accent">{kpis.avgEng}%</div>
+          <div className="stat-sub creators-ecosystem-kpi-trend">
+            <FiTrendingUp size={14} aria-hidden />
+            Roster mean
           </div>
         </div>
+      </div>
 
-        <div className="influencer-legend" aria-hidden>
-          <span>
-            <TierDot tier="scale" /> Scale aggressively
-          </span>
-          <span>
-            <TierDot tier="test" /> Test more
-          </span>
-          <span>
-            <TierDot tier="avoid" /> Avoid
-          </span>
+      <div className="creators-ecosystem-toolbar">
+        <div className="creators-ecosystem-search-wrap">
+          <FiSearch className="creators-ecosystem-search-icon" size={18} aria-hidden />
+          <input
+            type="search"
+            className="creators-ecosystem-search"
+            placeholder="Search by influencer name or offer code…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search by influencer or offer code"
+          />
         </div>
-
-        <div className="table-wrap influencer-table-wrap">
-          <table className="influencer-table">
-            <thead>
-              <tr>
-                <th className="influencer-th-narrow" aria-label="Recommendation" />
-                <th>Influencer</th>
-                <th>Offer codes</th>
-                <th>Videos</th>
-                <th>Avg views</th>
-                <th>Engagement</th>
-                <th>Sales</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.name}
-                  className="influencer-row"
-                  onClick={() => setSelected(row)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setSelected(row);
-                    }
-                  }}
-                  tabIndex={0}
-                  aria-label={`Open details for ${row.name}`}
-                >
-                  <td>
-                    <TierDot tier={row.tier} />
-                  </td>
-                  <td className="influencer-name-cell">{row.name}</td>
-                  <td className="influencer-offer-cell" title={row.offerCodes || ''}>
-                    {row.offerCodes || '—'}
-                  </td>
-                  <td>{row.videoCount}</td>
-                  <td>{row.avgViews.toLocaleString()}</td>
-                  <td>
-                    <span className="influencer-eng">{row.engagementPct}%</span>
-                  </td>
-                  <td className="influencer-sales-cell">
-                    {row.sales != null ? row.sales.toLocaleString() : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="creators-ecosystem-segments" role="tablist" aria-label="Creator segments">
+          {[
+            { id: 'all', label: 'All talent' },
+            { id: 'favorites', label: 'Favorites' },
+          ].map((seg) => (
+            <button
+              key={seg.id}
+              type="button"
+              role="tab"
+              aria-selected={segment === seg.id}
+              className={`creators-ecosystem-seg ${segment === seg.id ? 'creators-ecosystem-seg--active' : ''}`}
+              onClick={() => setSegment(seg.id)}
+            >
+              {seg.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {selected && (
-        <DrilldownPanel row={selected} onClose={() => setSelected(null)} />
+      {rows.length === 0 ? (
+        <div className="card influencer-table-card">
+          <div className="empty-state empty-state--soft">
+            <span className="empty-state-icon" aria-hidden>
+              👤
+            </span>
+            <p>No influencers yet — add videos with creator names and scrape.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="creators-ecosystem-table-card card influencer-table-card">
+          <div className="influencer-legend" aria-hidden>
+            <span>
+              <TierDot tier="scale" /> Scale aggressively
+            </span>
+            <span>
+              <TierDot tier="test" /> Test more
+            </span>
+            <span>
+              <TierDot tier="avoid" /> Avoid
+            </span>
+          </div>
+
+          <div className="table-wrap influencer-table-wrap creators-ecosystem-table-wrap">
+            <table className="influencer-table creators-ecosystem-table">
+              <thead>
+                <tr>
+                  <th className="influencer-th-narrow" aria-label="Recommendation" />
+                  <th>Influencer</th>
+                  <th>Offer codes</th>
+                  <th>Videos</th>
+                  <th>Avg views</th>
+                  <th>Engagement</th>
+                  <th>Sales</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="creators-ecosystem-empty">
+                      No creators match your filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredRows.map((row) => (
+                    <tr
+                      key={row.name}
+                      className="influencer-row creators-ecosystem-row"
+                      onClick={() => setSelected(row)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelected(row);
+                        }
+                      }}
+                      tabIndex={0}
+                      aria-label={`Open details for ${row.name}`}
+                    >
+                      <td>
+                        <TierDot tier={row.tier} />
+                      </td>
+                      <td>
+                        <div className="creators-ecosystem-name-cell">
+                          <CreatorAvatar name={row.name} />
+                          <div>
+                            <div className="creators-ecosystem-name-row">
+                              <span className="influencer-name-cell">{row.name}</span>
+                            </div>
+                            <div className="creators-ecosystem-category">{row.category}</div>
+                            <button
+                              type="button"
+                              className="creators-ecosystem-fav-text"
+                              onClick={(e) => toggleFavorite(e, row.name)}
+                            >
+                              {favorites.has(row.name) ? 'Saved to favorites' : 'Save to favorites'}
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="influencer-offer-cell" title={row.offerCodes || ''}>
+                        {row.offerCodes || '—'}
+                      </td>
+                      <td>{row.videoCount}</td>
+                      <td>{row.avgViews.toLocaleString()}</td>
+                      <td>
+                        <span className="influencer-eng">{row.engagementPct}%</span>
+                      </td>
+                      <td className="influencer-sales-cell">
+                        {row.sales != null ? row.sales.toLocaleString() : '—'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {filteredRows.length > 0 && (
+            <p className="creators-ecosystem-table-hint">
+              Click a row for full analytics. Showing {filteredRows.length.toLocaleString()} of{' '}
+              {rows.length.toLocaleString()} creators
+              {search.trim() || segment !== 'all' ? ' (filtered)' : ''}.
+            </p>
+          )}
+        </div>
       )}
-    </>
+
+      {selected && <DrilldownPanel row={selected} onClose={() => setSelected(null)} />}
+    </div>
   );
 }

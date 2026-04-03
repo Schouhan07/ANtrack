@@ -47,11 +47,29 @@ export default function VideosList() {
   };
 
   const openEdit = (v) => {
+    const pd = v.publishDate;
+    const publishStr =
+      pd == null
+        ? ''
+        : typeof pd === 'string'
+          ? pd.slice(0, 10)
+          : new Date(pd).toISOString().slice(0, 10);
     setEditForm({
       _id: v._id,
       url: v.url || '',
+      creator: v.creator || '',
+      platform: v.platform || 'unknown',
       initiatedBy: v.initiatedBy === 'supply' ? 'supply' : 'brand',
       campaign: v.campaign || '',
+      createdBy: v.createdBy || '',
+      publishDate: publishStr,
+      influencerName: v.influencerName || '',
+      influencerHandle: v.influencerHandle || '',
+      lob: v.lob || '',
+      videoDuration: v.videoDuration || '',
+      totalCost:
+        v.totalCost != null && v.totalCost !== '' ? String(v.totalCost) : '',
+      offerCode: v.offerCode || '',
     });
   };
 
@@ -59,10 +77,22 @@ export default function VideosList() {
     e.preventDefault();
     if (!editForm) return;
     try {
+      const tc =
+        editForm.totalCost === '' ? null : Number(editForm.totalCost);
       await updateVideo(editForm._id, {
         url: editForm.url.trim(),
+        creator: editForm.creator.trim(),
+        platform: editForm.platform,
         initiatedBy: editForm.initiatedBy,
         campaign: editForm.campaign.trim(),
+        createdBy: editForm.createdBy.trim(),
+        publishDate: editForm.publishDate || null,
+        influencerName: editForm.influencerName.trim(),
+        influencerHandle: editForm.influencerHandle.trim(),
+        lob: editForm.lob.trim(),
+        videoDuration: editForm.videoDuration.trim(),
+        totalCost: editForm.totalCost === '' || Number.isNaN(tc) ? null : tc,
+        offerCode: editForm.offerCode.trim(),
       });
       toast.success('Video updated');
       setEditForm(null);
@@ -82,7 +112,7 @@ export default function VideosList() {
         onClick={() => setEditForm(null)}
       >
         <div
-          className="influencer-modal videos-edit-modal"
+          className="influencer-modal influencer-modal--wide videos-edit-modal"
           role="dialog"
           aria-modal="true"
           aria-labelledby="videos-edit-title"
@@ -102,50 +132,155 @@ export default function VideosList() {
             </button>
           </div>
           <form onSubmit={saveEdit} className="videos-edit-form">
-            <div className="form-group">
-              <label htmlFor="edit-url">URL</label>
-              <input
-                id="edit-url"
-                type="text"
-                value={editForm.url}
-                onChange={(e) => setEditForm({ ...editForm, url: e.target.value })}
-                required
-                autoComplete="off"
-              />
-            </div>
-            <div className="form-group">
-              <span className="form-group-label">Initiated by</span>
-              <div className="bulk-initiated-options">
-                <label className="bulk-radio">
-                  <input
-                    type="radio"
-                    name="edit-initiatedBy"
-                    checked={editForm.initiatedBy === 'brand'}
-                    onChange={() => setEditForm({ ...editForm, initiatedBy: 'brand' })}
-                  />
-                  Brand
-                </label>
-                <label className="bulk-radio">
-                  <input
-                    type="radio"
-                    name="edit-initiatedBy"
-                    checked={editForm.initiatedBy === 'supply'}
-                    onChange={() => setEditForm({ ...editForm, initiatedBy: 'supply' })}
-                  />
-                  Supply
-                </label>
+            <div className="videos-edit-grid">
+              <div className="form-group">
+                <label htmlFor="edit-url">Post URL</label>
+                <input
+                  id="edit-url"
+                  type="text"
+                  value={editForm.url}
+                  onChange={(e) => setEditForm({ ...editForm, url: e.target.value })}
+                  required
+                  autoComplete="off"
+                />
               </div>
-            </div>
-            <div className="form-group">
-              <label htmlFor="edit-campaign">Campaign</label>
-              <input
-                id="edit-campaign"
-                type="text"
-                value={editForm.campaign}
-                onChange={(e) => setEditForm({ ...editForm, campaign: e.target.value })}
-                placeholder="Optional"
-                autoComplete="off"
-              />
+              <div className="form-group">
+                <label htmlFor="edit-platform">Platform</label>
+                <select
+                  id="edit-platform"
+                  value={editForm.platform}
+                  onChange={(e) => setEditForm({ ...editForm, platform: e.target.value })}
+                >
+                  <option value="tiktok">TikTok</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="unknown">Unknown</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="edit-createdBy">Created By</label>
+                <input
+                  id="edit-createdBy"
+                  type="text"
+                  value={editForm.createdBy}
+                  onChange={(e) => setEditForm({ ...editForm, createdBy: e.target.value })}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="edit-publishDate">Publish Date</label>
+                <input
+                  id="edit-publishDate"
+                  type="date"
+                  value={editForm.publishDate}
+                  onChange={(e) => setEditForm({ ...editForm, publishDate: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="edit-influencerName">Influencer Name</label>
+                <input
+                  id="edit-influencerName"
+                  type="text"
+                  value={editForm.influencerName}
+                  onChange={(e) => setEditForm({ ...editForm, influencerName: e.target.value })}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="edit-influencerHandle">Influencer Handle</label>
+                <input
+                  id="edit-influencerHandle"
+                  type="text"
+                  value={editForm.influencerHandle}
+                  onChange={(e) => setEditForm({ ...editForm, influencerHandle: e.target.value })}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="edit-creator">Creator (legacy / scrape)</label>
+                <input
+                  id="edit-creator"
+                  type="text"
+                  value={editForm.creator}
+                  onChange={(e) => setEditForm({ ...editForm, creator: e.target.value })}
+                  placeholder="Often synced from influencer name"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="edit-lob">LOB</label>
+                <input
+                  id="edit-lob"
+                  type="text"
+                  value={editForm.lob}
+                  onChange={(e) => setEditForm({ ...editForm, lob: e.target.value })}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="edit-videoDuration">Video Duration</label>
+                <input
+                  id="edit-videoDuration"
+                  type="text"
+                  value={editForm.videoDuration}
+                  onChange={(e) => setEditForm({ ...editForm, videoDuration: e.target.value })}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="edit-totalCost">Total Cost</label>
+                <input
+                  id="edit-totalCost"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editForm.totalCost}
+                  onChange={(e) => setEditForm({ ...editForm, totalCost: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="edit-offerCode">Coupon code used</label>
+                <input
+                  id="edit-offerCode"
+                  type="text"
+                  value={editForm.offerCode}
+                  onChange={(e) => setEditForm({ ...editForm, offerCode: e.target.value })}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="form-group">
+                <span className="form-group-label">Initiated by</span>
+                <div className="bulk-initiated-options">
+                  <label className="bulk-radio">
+                    <input
+                      type="radio"
+                      name="edit-initiatedBy"
+                      checked={editForm.initiatedBy === 'brand'}
+                      onChange={() => setEditForm({ ...editForm, initiatedBy: 'brand' })}
+                    />
+                    Brand
+                  </label>
+                  <label className="bulk-radio">
+                    <input
+                      type="radio"
+                      name="edit-initiatedBy"
+                      checked={editForm.initiatedBy === 'supply'}
+                      onChange={() => setEditForm({ ...editForm, initiatedBy: 'supply' })}
+                    />
+                    Supply
+                  </label>
+                </div>
+              </div>
+              <div className="form-group">
+                <label htmlFor="edit-campaign">Campaign</label>
+                <input
+                  id="edit-campaign"
+                  type="text"
+                  value={editForm.campaign}
+                  onChange={(e) => setEditForm({ ...editForm, campaign: e.target.value })}
+                  placeholder="Optional"
+                  autoComplete="off"
+                />
+              </div>
             </div>
             <div className="videos-edit-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setEditForm(null)}>
@@ -167,7 +302,24 @@ export default function VideosList() {
   const filteredVideos = useMemo(() => {
     const q = urlQuery.trim().toLowerCase();
     if (!q) return videos;
-    return videos.filter((v) => (v.url || '').toLowerCase().includes(q));
+    return videos.filter((v) => {
+      const parts = [
+        v.url,
+        v.creator,
+        v.campaign,
+        v.createdBy,
+        v.influencerName,
+        v.influencerHandle,
+        v.lob,
+        v.offerCode,
+        v.videoDuration,
+        v.totalCost != null ? String(v.totalCost) : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return parts.includes(q);
+    });
   }, [videos, urlQuery]);
 
   return (
@@ -204,7 +356,7 @@ export default function VideosList() {
         <input
           type="search"
           className="videos-url-search"
-          placeholder="Search by URL…"
+          placeholder="Search URL, influencer, LOB, coupon…"
           value={urlQuery}
           onChange={(e) => setUrlQuery(e.target.value)}
           aria-label="Search tracked videos by URL"
@@ -219,12 +371,20 @@ export default function VideosList() {
             No videos match “{urlQuery.trim()}”. Try another part of the URL.
           </div>
         ) : (
-          <div className="table-wrap">
+          <div className="table-wrap videos-tracked-wide">
             <table>
               <thead>
                 <tr>
                   <th>URL</th>
                   <th>Platform</th>
+                  <th>Influencer</th>
+                  <th>Handle</th>
+                  <th>Created By</th>
+                  <th>Publish</th>
+                  <th>LOB</th>
+                  <th>Duration</th>
+                  <th>Cost</th>
+                  <th>Coupon</th>
                   <th>Creator</th>
                   <th>Initiated by</th>
                   <th>Campaign</th>
@@ -246,6 +406,22 @@ export default function VideosList() {
                         {v.platform}
                       </span>
                     </td>
+                    <td>{v.influencerName || '—'}</td>
+                    <td>{v.influencerHandle || '—'}</td>
+                    <td>{v.createdBy || '—'}</td>
+                    <td>
+                      {v.publishDate
+                        ? new Date(v.publishDate).toLocaleDateString()
+                        : '—'}
+                    </td>
+                    <td>{v.lob || '—'}</td>
+                    <td>{v.videoDuration || '—'}</td>
+                    <td>
+                      {v.totalCost != null && v.totalCost !== ''
+                        ? Number(v.totalCost).toLocaleString()
+                        : '—'}
+                    </td>
+                    <td>{v.offerCode || '—'}</td>
                     <td>{v.creator || '—'}</td>
                     <td>
                       <span className="badge badge-initiated badge-initiated--subtle">

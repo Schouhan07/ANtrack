@@ -26,6 +26,10 @@ const videoMetricSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  comments: {
+    type: Number,
+    default: 0,
+  },
   viral: {
     type: Boolean,
     default: false,

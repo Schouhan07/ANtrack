@@ -10,7 +10,16 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { fetchMetricsByVideo } from '../services/api';
+import { fetchMetricsByVideo, fetchVideoById } from '../services/api';
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleDateString();
+  } catch {
+    return '—';
+  }
+}
 
 export default function VideoDetail() {
   const { id } = useParams();
@@ -19,27 +28,32 @@ export default function VideoDetail() {
   const [video, setVideo] = useState(null);
 
   useEffect(() => {
-    const load = () => {
+    const loadVideoDoc = () => {
+      fetchVideoById(id)
+        .then((res) => setVideo(res.data))
+        .catch(() => setVideo(null));
+    };
+
+    const loadMetrics = () => {
       fetchMetricsByVideo(id, 90)
         .then((res) => {
           const sorted = res.data.sort(
             (a, b) => new Date(a.scrapedAt) - new Date(b.scrapedAt)
           );
           setMetrics(sorted);
-          if (sorted.length > 0) {
-            const v = sorted[0].videoId;
-            setVideo(v && typeof v === 'object' ? v : null);
-          } else {
-            setVideo(null);
-          }
         })
         .catch(console.error);
     };
-    load();
+
+    loadVideoDoc();
+    loadMetrics();
 
     const onVideosUpdated = (e) => {
       const touched = e.detail?.id;
-      if (!touched || String(touched) === String(id)) load();
+      if (!touched || String(touched) === String(id)) {
+        loadVideoDoc();
+        loadMetrics();
+      }
     };
     window.addEventListener('videos-updated', onVideosUpdated);
     return () => window.removeEventListener('videos-updated', onVideosUpdated);
@@ -61,14 +75,69 @@ export default function VideoDetail() {
 
       <h1 style={{ marginBottom: 8 }}>Video Detail</h1>
       {video && (
-        <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: 24 }}>
-          {video.creator && <strong>{video.creator}</strong>}
-          {video.campaign && <> &middot; {video.campaign}</>}
-          {' — '}
-          <a href={video.url} target="_blank" rel="noopener noreferrer">
-            {video.url}
-          </a>
-        </p>
+        <>
+          <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: 16 }}>
+            {(video.influencerName || video.creator) && (
+              <strong>{video.influencerName || video.creator}</strong>
+            )}
+            {video.campaign && <> &middot; {video.campaign}</>}
+            {' — '}
+            <a href={video.url} target="_blank" rel="noopener noreferrer">
+              {video.url}
+            </a>
+          </p>
+          <div className="card video-detail-meta" style={{ marginBottom: 24 }}>
+            <div className="card-header">
+              <h2>Post details</h2>
+            </div>
+            <dl className="video-detail-meta-dl">
+              <div>
+                <dt>Created By</dt>
+                <dd>{video.createdBy || '—'}</dd>
+              </div>
+              <div>
+                <dt>Publish Date</dt>
+                <dd>{fmtDate(video.publishDate)}</dd>
+              </div>
+              <div>
+                <dt>Influencer Name</dt>
+                <dd>{video.influencerName || '—'}</dd>
+              </div>
+              <div>
+                <dt>Influencer Handle</dt>
+                <dd>{video.influencerHandle || '—'}</dd>
+              </div>
+              <div>
+                <dt>Platform</dt>
+                <dd>{video.platform || '—'}</dd>
+              </div>
+              <div>
+                <dt>LOB</dt>
+                <dd>{video.lob || '—'}</dd>
+              </div>
+              <div>
+                <dt>Video Duration</dt>
+                <dd>{video.videoDuration || '—'}</dd>
+              </div>
+              <div>
+                <dt>Total Cost</dt>
+                <dd>
+                  {video.totalCost != null && video.totalCost !== ''
+                    ? Number(video.totalCost).toLocaleString()
+                    : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt>Coupon code used</dt>
+                <dd>{video.offerCode || '—'}</dd>
+              </div>
+              <div>
+                <dt>Initiated by</dt>
+                <dd>{video.initiatedBy === 'supply' ? 'Supply' : 'Brand'}</dd>
+              </div>
+            </dl>
+          </div>
+        </>
       )}
 
       {chartData.length > 0 ? (

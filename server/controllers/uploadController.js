@@ -1,10 +1,69 @@
 const XLSX = require('xlsx');
 const Video = require('../models/Video');
+const { buildVideoCreatePayload } = require('../utils/videoPayload');
+
+/**
+ * Map a spreadsheet row (Excel or Google CSV) to the shape expected by buildVideoCreatePayload.
+ */
+function rowToVideoRaw(row) {
+  const url =
+    row.URL || row.url || row.Url || row.link || row.Link || '';
+  const initiatedRaw =
+    row.InitiatedBy ||
+    row.initiatedBy ||
+    row['Initiated by'] ||
+    row['initiated by'] ||
+    '';
+  const initiatedBy =
+    String(initiatedRaw).toLowerCase() === 'supply' ? 'supply' : 'brand';
+
+  return {
+    url: String(url).trim(),
+    creator: row.Creator || row.creator || row.Name || row.name || '',
+    campaign: row.Campaign || row.campaign || '',
+    platform: row.Platform || row.platform || '',
+    initiatedBy,
+    createdBy:
+      row['Created By'] || row.createdBy || row.CreatedBy || '',
+    publishDate:
+      row['Publish Date'] ||
+      row.publishDate ||
+      row.PublishDate ||
+      '',
+    influencerName:
+      row['Influencer Name'] ||
+      row.influencerName ||
+      row.InfluencerName ||
+      '',
+    influencerHandle:
+      row['Influencer Handle'] ||
+      row.influencerHandle ||
+      row.Handle ||
+      row.handle ||
+      '',
+    lob: row.LOB || row.lob || '',
+    videoDuration:
+      row['Video Duration'] ||
+      row.videoDuration ||
+      row.Duration ||
+      '',
+    totalCost:
+      row['Total Cost'] || row.totalCost || row.Cost || row.cost || '',
+    offerCode:
+      row['Coupon code used'] ||
+      row.offerCode ||
+      row.couponCode ||
+      row['Offer code'] ||
+      '',
+    sales: row.Sales || row.sales || '',
+  };
+}
 
 /**
  * POST /api/upload/excel
  * Parse uploaded Excel file and bulk-insert videos.
- * Expected columns: URL, Creator, Campaign, Platform. Optional: InitiatedBy (brand or supply).
+ * Columns: URL (required), Creator, Campaign, Platform, InitiatedBy, Created By, Publish Date,
+ * Influencer Name, Influencer Handle, LOB, Video Duration, Total Cost, Coupon code used, Sales.
  */
 exports.uploadExcel = async (req, res) => {
   try {
@@ -23,40 +82,18 @@ exports.uploadExcel = async (req, res) => {
     const results = { added: 0, duplicates: 0, errors: [] };
 
     for (const row of rows) {
-      // Support common column name variations
-      const url =
-        row.URL || row.url || row.Url || row.link || row.Link || '';
-      const creator =
-        row.Creator || row.creator || row.Name || row.name || '';
-      const campaign =
-        row.Campaign || row.campaign || '';
-      const platform =
-        row.Platform || row.platform || '';
-      const initiatedRaw =
-        row.InitiatedBy ||
-        row.initiatedBy ||
-        row['Initiated by'] ||
-        row['initiated by'] ||
-        '';
-      const initiatedBy =
-        String(initiatedRaw).toLowerCase() === 'supply' ? 'supply' : 'brand';
-
-      if (!url.trim()) continue;
+      const raw = rowToVideoRaw(row);
+      const payload = buildVideoCreatePayload(raw);
+      if (!payload) continue;
 
       try {
-        await Video.create({
-          url: url.trim(),
-          creator: creator.toString().trim(),
-          campaign: campaign.toString().trim(),
-          platform: platform.toString().trim().toLowerCase() || undefined,
-          initiatedBy,
-        });
+        await Video.create(payload);
         results.added++;
       } catch (err) {
         if (err.code === 11000) {
           results.duplicates++;
         } else {
-          results.errors.push(`Row "${url}": ${err.message}`);
+          results.errors.push(`Row "${raw.url}": ${err.message}`);
         }
       }
     }
@@ -78,7 +115,6 @@ exports.importGoogleSheet = async (req, res) => {
       return res.status(400).json({ error: 'sheetUrl is required' });
     }
 
-    // Convert share URL → CSV export URL
     const csvUrl = convertToCsvUrl(sheetUrl);
 
     const axios = require('axios');
@@ -90,34 +126,18 @@ exports.importGoogleSheet = async (req, res) => {
     const results = { added: 0, duplicates: 0, errors: [] };
 
     for (const row of rows) {
-      const url = row.URL || row.url || row.Url || row.link || '';
-      const creator = row.Creator || row.creator || row.Name || '';
-      const campaign = row.Campaign || row.campaign || '';
-      const platform = row.Platform || row.platform || '';
-      const initiatedRaw =
-        row.InitiatedBy ||
-        row.initiatedBy ||
-        row['Initiated by'] ||
-        '';
-      const initiatedBy =
-        String(initiatedRaw).toLowerCase() === 'supply' ? 'supply' : 'brand';
-
-      if (!url.trim()) continue;
+      const raw = rowToVideoRaw(row);
+      const payload = buildVideoCreatePayload(raw);
+      if (!payload) continue;
 
       try {
-        await Video.create({
-          url: url.trim(),
-          creator: creator.toString().trim(),
-          campaign: campaign.toString().trim(),
-          platform: platform.toString().trim().toLowerCase() || undefined,
-          initiatedBy,
-        });
+        await Video.create(payload);
         results.added++;
       } catch (err) {
         if (err.code === 11000) {
           results.duplicates++;
         } else {
-          results.errors.push(`Row "${url}": ${err.message}`);
+          results.errors.push(`Row "${raw.url}": ${err.message}`);
         }
       }
     }
@@ -137,7 +157,6 @@ function convertToCsvUrl(url) {
   if (!match) throw new Error('Invalid Google Sheets URL');
   const id = match[1];
 
-  // Extract gid (sheet id) if present
   const gidMatch = url.match(/gid=(\d+)/);
   const gid = gidMatch ? gidMatch[1] : '0';
 

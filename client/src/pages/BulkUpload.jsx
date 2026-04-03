@@ -1,6 +1,190 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { addBulkVideos, uploadExcel, importGoogleSheet } from '../services/api';
+import {
+  addVideo,
+  addBulkVideos,
+  uploadExcel,
+  importGoogleSheet,
+} from '../services/api';
+
+const ADD_VIDEO_STEPS = [
+  { key: 'publishDate', label: 'Video Publish Date', type: 'date' },
+  { key: 'influencerName', label: 'Influencer Name', type: 'text', placeholder: 'Display name' },
+  { key: 'influencerHandle', label: 'Influencer Handle', type: 'text', placeholder: '@handle' },
+  { key: 'url', label: 'Post URL', type: 'text', placeholder: 'TikTok or Instagram post URL', required: true },
+  { key: 'platform', label: 'Platform', type: 'platform' },
+  { key: 'lob', label: 'Line of Business', type: 'lob' },
+  { key: 'videoDuration', label: 'Video Duration', type: 'text', placeholder: 'e.g. 0:45 or 45s' },
+  { key: 'totalCost', label: 'Total Cost (in RM)', type: 'number', placeholder: 'Optional' },
+  { key: 'offerCode', label: 'Coupon code used', type: 'text', placeholder: 'Offer / promo code' },
+];
+
+function platformGuessFromUrl(u) {
+  const s = String(u || '').toLowerCase();
+  if (s.includes('instagram.com') || s.includes('instagr.am')) return 'instagram';
+  if (s.includes('tiktok.com') || s.includes('vm.tiktok.com')) return 'tiktok';
+  return '';
+}
+
+function AddVideoWaterfall({ initiatedBy, loading, setLoading }) {
+  const emptyForm = useMemo(
+    () => Object.fromEntries(ADD_VIDEO_STEPS.map((s) => [s.key, ''])),
+    []
+  );
+  const [step, setStep] = useState(0); // kept for compatibility with existing logic, not used in form layout
+  const [form, setForm] = useState(emptyForm);
+
+  const current = ADD_VIDEO_STEPS[step];
+  const total = ADD_VIDEO_STEPS.length;
+
+  const setField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+  const submitVideo = async () => {
+    const url = String(form.url || '').trim();
+    if (!url) {
+      toast.error('Post URL is required');
+      return;
+    }
+    setLoading(true);
+    try {
+      const totalCostRaw = form.totalCost;
+      const totalCost =
+        totalCostRaw === '' || totalCostRaw == null
+          ? undefined
+          : Number(totalCostRaw);
+      await addVideo({
+        url,
+        platform: form.platform || undefined,
+        publishDate: form.publishDate || undefined,
+        influencerName: form.influencerName.trim() || undefined,
+        influencerHandle: form.influencerHandle.trim() || undefined,
+        lob: form.lob || undefined,
+        videoDuration: form.videoDuration.trim() || undefined,
+        totalCost: Number.isNaN(totalCost) ? undefined : totalCost,
+        offerCode: form.offerCode.trim() || undefined,
+        initiatedBy,
+      });
+      toast.success('Video added to tracking');
+      setStep(0);
+      setForm({ ...emptyForm });
+      window.dispatchEvent(new CustomEvent('videos-updated', { detail: {} }));
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to add video');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const goNext = () => {
+    if (current.key === 'url' && !String(form.url || '').trim()) {
+      toast.error('Enter the post URL');
+      return;
+    }
+    if (current.key === 'url') {
+      const g = platformGuessFromUrl(form.url);
+      if (g && !form.platform) setField('platform', g);
+    }
+    setStep((s) => Math.min(s + 1, ADD_VIDEO_STEPS.length - 1));
+  };
+
+  const goBack = () => setStep((s) => Math.max(0, s - 1));
+
+  return (
+    <div className="upload-card">
+      <h3>Add Single Video</h3>
+      <p className="bulk-initiated-hint">
+        Fill in the video details below. Platform is auto-detected from URL when possible.
+      </p>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {ADD_VIDEO_STEPS.map((field) => (
+          <div key={field.key} className="form-group">
+            <label htmlFor={`video-${field.key}`}>
+              {field.label}
+              {field.required && <span style={{ color: '#ef4444' }}>*</span>}
+            </label>
+
+            {field.type === 'text' && (
+  <input
+    id={`video-${field.key}`}
+    type="text"
+    value={form[field.key]}
+    onChange={(e) => {
+      const newUrl = e.target.value;
+      setField(field.key, newUrl);
+      
+      // Auto-detect platform from URL
+      if (field.key === 'url' && newUrl.trim()) {
+        const detectedPlatform = platformGuessFromUrl(newUrl);
+        if (detectedPlatform && !form.platform) {
+          setField('platform', detectedPlatform);
+        }
+      }
+    }}
+    placeholder={field.placeholder || ''}
+    autoComplete="off"
+  />
+)}
+
+            {field.type === 'date' && (
+              <input
+                id={`video-${field.key}`}
+                type="date"
+                value={form[field.key]}
+                onChange={(e) => setField(field.key, e.target.value)}
+              />
+            )}
+
+            {field.type === 'number' && (
+              <input
+                id={`video-${field.key}`}
+                type="number"
+                min="0"
+                step="0.01"
+                value={form[field.key]}
+                onChange={(e) => setField(field.key, e.target.value)}
+                placeholder={field.placeholder || ''}
+              />
+            )}
+
+            {field.type === 'platform' && (
+              <select
+                id={`video-${field.key}`}
+                value={form.platform || ''}
+                onChange={(e) => setField('platform', e.target.value)}
+              >
+                <option value="">Auto (from URL)</option>
+                <option value="tiktok">TikTok</option>
+                <option value="instagram">Instagram</option>
+              </select>
+            )}
+
+            {field.type === 'lob' && (
+              <select
+                id={`video-${field.key}`}
+                value={form.lob || ''}
+                onChange={(e) => setField('lob', e.target.value)}
+              >
+                <option value="">Select LOB</option>
+                <option value="BUS">BUS</option>
+                <option value="FERRY">FERRY</option>
+                <option value="TTD">TTD</option>
+              </select>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button
+        className="btn btn-primary mt-12"
+        disabled={loading}
+        onClick={submitVideo}
+      >
+        {loading ? 'Saving…' : 'Add video'}
+      </button>
+    </div>
+  );
+}
 
 export default function BulkUpload() {
   const [tiktokUrls, setTiktokUrls] = useState('');
@@ -97,6 +281,12 @@ export default function BulkUpload() {
         </div>
       </div>
 
+      <AddVideoWaterfall
+        initiatedBy={initiatedBy}
+        loading={loading}
+        setLoading={setLoading}
+      />
+
       {result && (
         <div className="results-banner success">
           Added: {result.added} &nbsp;|&nbsp; Duplicates: {result.duplicates}
@@ -147,11 +337,11 @@ export default function BulkUpload() {
       </div>
 
       {/* ── Upload Excel ───────────────── */}
-      <div className="upload-card">
+      {/* <div className="upload-card">
         <h3>Upload Excel File (.xlsx)</h3>
         <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: 12 }}>
-          Columns: URL, Creator, Campaign, Platform (tiktok or instagram). Optional: InitiatedBy
-          (brand or supply).
+          Required: URL. Optional: Creator, Campaign, Platform, InitiatedBy, Created By, Publish Date,
+          Influencer Name, Influencer Handle, LOB, Video Duration, Total Cost, Coupon code used, Sales.
         </p>
         <input
           type="file"
@@ -171,8 +361,7 @@ export default function BulkUpload() {
       <div className="upload-card">
         <h3>Import from Google Sheet</h3>
         <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: 12 }}>
-          Sheet must be public. Columns: URL, Creator, Campaign, Platform. Optional: InitiatedBy
-          (brand or supply).
+          Sheet must be public. Same columns as Excel (URL required; extended fields optional).
         </p>
         <input
           type="text"
@@ -187,7 +376,7 @@ export default function BulkUpload() {
         >
           {loading ? 'Importing…' : 'Import from Sheet'}
         </button>
-      </div>
+      </div> 
     </div>
   );
 }

@@ -9,6 +9,7 @@ const {
   getDailyViews,
   getDailyBreakdown,
   getPortfolioRunComparison,
+  getDashboardKpis,
   getTopCreators,
   getInfluencerInsights,
   scrapeNow,
@@ -22,6 +23,7 @@ router.get('/weekly-trend', getWeeklyTrend);
 router.get('/daily-views', getDailyViews);
 router.get('/daily-breakdown', getDailyBreakdown);
 router.get('/portfolio-run-comparison', getPortfolioRunComparison);
+router.get('/dashboard-kpis', getDashboardKpis);
 router.get('/top-creators', getTopCreators);
 router.get('/influencers', getInfluencerInsights);
 router.post('/scrape-now', scrapeNow);
