@@ -34,6 +34,7 @@ app.use('/api/metrics', require('./routes/metricRoutes'));
 app.use('/api/upload', require('./routes/uploadRoutes'));
 app.use('/api/campaigns', require('./routes/campaignRoutes'));
 app.use('/api/creator-offers', require('./routes/creatorOfferRoutes'));
+app.use('/api/insights', require('./routes/insightsRoutes'));
 
 // Health check
 app.get('/api/health', (_req, res) => {

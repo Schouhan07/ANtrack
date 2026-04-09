@@ -42,6 +42,9 @@ export const fetchTopCreators = () => API.get('/metrics/top-creators');
 export const fetchInfluencerInsights = () => API.get('/metrics/influencers');
 export const triggerScrape = () => API.post('/metrics/scrape-now');
 
+// ── AI insights (Gemini) ────────────────────────
+export const fetchAiInsights = () => API.get('/insights');
+
 // ── Upload ──────────────────────────────────────
 export const uploadExcel = (file) => {
   const form = new FormData();

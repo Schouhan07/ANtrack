@@ -38,6 +38,13 @@ exports.getApiCatalog = (req, res) => {
       { method: 'GET', path: '/api/metrics/influencers', description: 'Influencer insights table' },
       { method: 'POST', path: '/api/metrics/scrape-now', description: 'Run Apify scrape (same as Scrape Now button)' },
 
+      { group: 'AI' },
+      {
+        method: 'GET',
+        path: '/api/insights',
+        description: 'Gemini AI insights from portfolio snapshot (requires GEMINI_API_KEY)',
+      },
+
       { group: 'Upload' },
       { method: 'POST', path: '/api/upload/excel', body: 'multipart file', description: 'Import .xlsx' },
       { method: 'POST', path: '/api/upload/google-sheet', body: '{ sheetUrl }', description: 'Import public sheet CSV' },

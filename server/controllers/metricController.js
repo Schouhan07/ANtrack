@@ -538,6 +538,9 @@ async function computePortfolioRunComparison() {
   };
 }
 
+/** Used by AI insights service — same basis as dashboard portfolio KPIs. */
+exports.computePortfolioRunComparison = computePortfolioRunComparison;
+
 exports.getPortfolioRunComparison = async (req, res) => {
   try {
     const data = await computePortfolioRunComparison();

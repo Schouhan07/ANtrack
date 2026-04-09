@@ -9,6 +9,7 @@ import InfluencerInsightsTab from '../components/InfluencerInsightsTab';
 import DataMetricsTab from '../components/DataMetricsTab';
 import DashboardTopCreatorsInsight from '../components/DashboardTopCreatorsInsight';
 import VideoTrackingTab from '../components/VideoTrackingTab';
+import AiInsightsTab from '../components/AiInsightsTab';
 import { fetchDashboardKpis, triggerScrape } from '../services/api';
 
 const TABS = [
@@ -27,7 +28,7 @@ const TAB_SUBTITLES = {
   'video-tracking': 'Track views, engagement, and performance across all monitored posts.',
   metrics: 'Daily breakdown and latest vs previous scrape comparison.',
   working: 'Daily views and top creators across your roster.',
-  why: 'AI-powered breakdowns (coming soon).',
+  why: 'Gemini AI insights from your live portfolio metrics.',
   creators: 'Per-creator performance and drill-downs.',
   actions: 'Recommended next steps (coming soon).',
   performance: 'Scrape fresh metrics and review per-video performance.',
@@ -158,9 +159,9 @@ function DashboardKpiSection({ kpis, loadingKpis, port, pct }) {
             <div className="value accent">
               {kpis?.avgEngagementPct != null ? `${kpis.avgEngagementPct}%` : '—'}
             </div>
-            <div className="stat-sub">
+            {/* <div className="stat-sub">
               (Likes + shares + saves + comments) ÷ views, latest run totals
-            </div>
+            </div> */}
           </div>
 
           <div className="stat-card stat-card--compact stat-card--ppv">
@@ -169,21 +170,21 @@ function DashboardKpiSection({ kpis, loadingKpis, port, pct }) {
             <div className="value">
               {kpis?.payPerView != null ? `$${fmtMoney(kpis.payPerView)}` : '—'}
             </div>
-            <div className="stat-sub">
+            {/* <div className="stat-sub">
               Sum of Total Cost on active videos ÷ latest portfolio views
-            </div>
+            </div> */}
           </div>
 
           <div className="stat-card stat-card--compact stat-card--txn">
             <div className="stat-card-accent" aria-hidden />
             <div className="label">Transactions</div>
             <div className="value">{fmtInt(kpis?.transactionsTotal)}</div>
-            <div className="stat-sub">
+            {/* <div className="stat-sub">
               Sum of Sales on tracked videos
               {kpis?.transactionsVideos != null && kpis.transactionsVideos > 0
                 ? ` · ${kpis.transactionsVideos} video${kpis.transactionsVideos !== 1 ? 's' : ''} with sales`
                 : ''}
-            </div>
+            </div> */}
           </div>
         </div>
       )}
@@ -278,7 +279,10 @@ export default function Dashboard() {
               port={port}
               pct={pct}
             />
-            <DashboardTopCreatorsInsight onViewAllCreators={() => setActiveTab('creators')} />
+            <DashboardTopCreatorsInsight
+              onViewAllCreators={() => setActiveTab('creators')}
+              onOpenFullInsights={() => setActiveTab('why')}
+            />
             <div className="dashboard-tab-panels-region">
               <div className="dashboard-tab-panels">
                 <section className="dashboard-tab-panel" aria-label="Summary">
@@ -314,15 +318,8 @@ export default function Dashboard() {
         )}
 
         {activeTab === 'why' && (
-          <div className="dashboard-tab-panels-region placeholder-panel">
-            <div className="card placeholder-card">
-              <span className="placeholder-card-icon" aria-hidden>
-                🧠
-              </span>
-              <p className="placeholder-panel-text">
-                Gemini-powered breakdowns will go here (hooks, formats, pacing).
-              </p>
-            </div>
+          <div className="dashboard-tab-panels-region">
+            <AiInsightsTab />
           </div>
         )}
 

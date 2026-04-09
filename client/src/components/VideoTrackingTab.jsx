@@ -7,6 +7,16 @@ import VideoTrackingFilters, { INITIAL_TRACKING_FILTERS } from './VideoTrackingF
 
 const PAGE_SIZE = 8;
 
+const VIDEO_TRACKING_SORT_COLUMNS = [
+  { field: 'video', label: 'Video', numeric: false },
+  { field: 'creator', label: 'Creator', numeric: false },
+  { field: 'campaign', label: 'Campaign', numeric: false },
+  { field: 'views', label: 'Views', numeric: true },
+  { field: 'engagement', label: 'Engagement', numeric: true },
+  { field: 'shares', label: 'Shares', numeric: true },
+  { field: 'saves', label: 'Saves', numeric: true },
+];
+
 function fmtCount(n) {
   return Math.max(0, Number(n) || 0).toLocaleString();
 }
@@ -25,6 +35,29 @@ function shareRate(row) {
 function saveRate(row) {
   const v = Math.max(1, Number(row.views) || 0);
   return `${(((Number(row.saves) || 0) / v) * 100).toFixed(1)}%`;
+}
+
+/** @param {'video'|'creator'|'campaign'|'views'|'engagement'|'shares'|'saves'} field */
+function getSortValue(r, field) {
+  const v = r.video || {};
+  switch (field) {
+    case 'video':
+      return `${(v.influencerName || v.creator || '').toLowerCase()} ${(r.url || v.url || '').toLowerCase()}`;
+    case 'creator':
+      return String(v.influencerName || v.creator || '').toLowerCase();
+    case 'campaign':
+      return String(v.campaign || '').toLowerCase();
+    case 'views':
+      return Number(r.views) || 0;
+    case 'engagement':
+      return parseFloat(engagementPct(r)) || 0;
+    case 'shares':
+      return Number(r.shares) || 0;
+    case 'saves':
+      return Number(r.saves) || 0;
+    default:
+      return 0;
+  }
 }
 
 function parseFilterNum(s) {
@@ -74,6 +107,33 @@ function KpiCard({ label, value, sub, tone }) {
   );
 }
 
+function VideoTrackingSortTh({ field, label, numeric, sortField, sortOrder, onSort }) {
+  const active = sortField === field;
+  const orderLabel = active ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'not sorted';
+  return (
+    <th
+      scope="col"
+      className={`video-tracking-th-sort ${numeric ? 'video-tracking-th-num' : ''} ${active ? 'video-tracking-th-sort--active' : ''}`}
+    >
+      <button
+        type="button"
+        className={`video-tracking-sort-btn ${numeric ? 'video-tracking-sort-btn--num' : ''}`}
+        onClick={() => onSort(field)}
+        aria-sort={active ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+        aria-label={`Sort by ${label}, ${orderLabel}. Click to change order.`}
+      >
+        <span className="video-tracking-sort-label">{label}</span>
+        <span
+          className={`video-tracking-sort-indicator ${active ? 'video-tracking-sort-indicator--active' : 'video-tracking-sort-indicator--idle'}`}
+          aria-hidden
+        >
+          {active ? (sortOrder === 'asc' ? '↑' : '↓') : '↑'}
+        </span>
+      </button>
+    </th>
+  );
+}
+
 export default function VideoTrackingTab() {
   const navigate = useNavigate();
   const [kpis, setKpis] = useState(null);
@@ -81,6 +141,8 @@ export default function VideoTrackingTab() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState(() => ({ ...INITIAL_TRACKING_FILTERS }));
+  const [sortField, setSortField] = useState(null);
+  const [sortOrder, setSortOrder] = useState('desc');
 
   const patchFilter = useCallback((key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -131,24 +193,48 @@ export default function VideoTrackingTab() {
     });
   }, [rows, filters]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const sortedRows = useMemo(() => {
+    if (!sortField) return filteredRows;
+    return [...filteredRows].sort((a, b) => {
+      const valA = getSortValue(a, sortField);
+      const valB = getSortValue(b, sortField);
+      if (typeof valA === 'string' && typeof valB === 'string') {
+        const cmp = valA.localeCompare(valB, undefined, { sensitivity: 'base' });
+        return sortOrder === 'asc' ? cmp : -cmp;
+      }
+      const na = Number(valA);
+      const nb = Number(valB);
+      return sortOrder === 'asc' ? na - nb : nb - na;
+    });
+  }, [filteredRows, sortField, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
   const pageClamped = Math.min(page, totalPages);
   const sliceStart = (pageClamped - 1) * PAGE_SIZE;
   const pageRows = useMemo(
-    () => filteredRows.slice(sliceStart, sliceStart + PAGE_SIZE),
-    [filteredRows, sliceStart]
+    () => sortedRows.slice(sliceStart, sliceStart + PAGE_SIZE),
+    [sortedRows, sliceStart]
   );
 
   useEffect(() => {
     setPage(1);
-  }, [rows.length, filters]);
+  }, [rows.length, filters, sortField, sortOrder]);
+
+  const handleSort = useCallback((field) => {
+    if (sortField === field) {
+      setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('desc');
+    }
+  }, [sortField]);
 
   const clearFilters = useCallback(() => {
     setFilters({ ...INITIAL_TRACKING_FILTERS });
   }, []);
 
   const exportCsv = () => {
-    if (!filteredRows.length) {
+    if (!sortedRows.length) {
       toast.error('No data to export');
       return;
     }
@@ -163,7 +249,7 @@ export default function VideoTrackingTab() {
       'saves',
       'engagement_pct',
     ];
-    const lines = filteredRows.map((r) => {
+    const lines = sortedRows.map((r) => {
       const v = r.video || {};
       const url = (r.url || v.url || '').replace(/"/g, '""');
       const creator = (v.influencerName || v.creator || '').replace(/"/g, '""');
@@ -184,7 +270,7 @@ export default function VideoTrackingTab() {
   };
 
   const downloadPerformanceReport = () => {
-    if (!filteredRows.length) {
+    if (!sortedRows.length) {
       toast.error('No data to include in the report');
       return;
     }
@@ -211,7 +297,7 @@ export default function VideoTrackingTab() {
     }
     out.push('');
     out.push('VIDEOS');
-    filteredRows.forEach((r, i) => {
+    sortedRows.forEach((r, i) => {
       const v = r.video || {};
       const url = (r.url || v.url || '').trim();
       const creator = v.influencerName || v.creator || '—';
@@ -283,13 +369,12 @@ export default function VideoTrackingTab() {
             tone="engagement"
             label="Avg engagement"
             value={kpis?.avgEngagementPct != null ? `${kpis.avgEngagementPct}%` : '—'}
-            sub="(Likes + shares + saves + comments) ÷ views, latest run totals"
           />
           <KpiCard
             tone="growth"
             label="Views growth"
             value={viewsGrowthLabel(kpis)}
-            sub="vs last run (same basis as Summary)"
+            // sub="vs last run (same basis as Summary)"
           />
         </div>
       )}
@@ -307,13 +392,17 @@ export default function VideoTrackingTab() {
           <table className="video-tracking-table">
             <thead>
               <tr>
-                <th>Video</th>
-                <th>Creator</th>
-                <th>Campaign</th>
-                <th className="video-tracking-th-num">Views</th>
-                <th className="video-tracking-th-num">Engagement</th>
-                <th className="video-tracking-th-num">Shares</th>
-                <th className="video-tracking-th-num">Saves</th>
+                {VIDEO_TRACKING_SORT_COLUMNS.map((col) => (
+                  <VideoTrackingSortTh
+                    key={col.field}
+                    field={col.field}
+                    label={col.label}
+                    numeric={col.numeric}
+                    sortField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                  />
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -394,14 +483,14 @@ export default function VideoTrackingTab() {
           </table>
         </div>
 
-        {filteredRows.length > 0 && (
+        {sortedRows.length > 0 && (
           <div className="video-tracking-pagination">
             <span className="muted-caption video-tracking-page-info">
               Showing{' '}
               <strong>
-                {sliceStart + 1} – {Math.min(sliceStart + PAGE_SIZE, filteredRows.length)}
+                {sliceStart + 1} – {Math.min(sliceStart + PAGE_SIZE, sortedRows.length)}
               </strong>{' '}
-              of {filteredRows.length}
+              of {sortedRows.length}
               {filteredRows.length !== rows.length ? ` (filtered from ${rows.length})` : ''} videos
             </span>
             <div className="video-tracking-page-btns">
