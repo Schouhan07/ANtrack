@@ -1,0 +1,10 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# Deploy the API and serve the CRA build from the same service (../client/build).
+services:
+  - type: web
+    name: influencer-tracker
+    runtime: node
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
