@@ -85,6 +85,7 @@ async function saveResults(results, normaliseFn, idToVideo, creatorMap = null) {
     const viral = await isViral(video._id, m.views);
 
     await VideoMetric.create({
+      tenantId: video.tenantId,
       videoId: video._id,
       url: video.url,
       views: m.views,
@@ -118,10 +119,13 @@ async function saveResults(results, normaliseFn, idToVideo, creatorMap = null) {
  * Core scrape-and-store logic.
  * Splits URLs by platform and calls the correct Apify actor for each.
  */
-async function runScrapeJob() {
+async function runScrapeJob(opts = {}) {
+  const { tenantId } = opts;
   console.log(`[CRON] Scrape job started at ${new Date().toISOString()}`);
 
-  const videos = await Video.find({ status: 'active' }).lean();
+  const q = { status: 'active' };
+  if (tenantId) q.tenantId = tenantId;
+  const videos = await Video.find(q).lean();
   if (videos.length === 0) {
     console.log('[CRON] No active videos to scrape.');
     return { scraped: 0 };

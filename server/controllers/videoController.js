@@ -1,11 +1,21 @@
 const Video = require('../models/Video');
 const VideoMetric = require('../models/VideoMetric');
 const { buildVideoCreatePayload } = require('../utils/videoPayload');
+const { videoFilter } = require('../utils/tenantScope');
+const { isValidObjectId } = require('../utils/mongoId');
+
+const BULK_MAX_URLS = Math.min(
+  Math.max(Number(process.env.BULK_MAX_URLS) || 500, 1),
+  2000
+);
 
 // GET /api/videos/:id – single video (for detail page when no metrics yet)
 exports.getVideoById = async (req, res) => {
   try {
-    const video = await Video.findById(req.params.id).lean();
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    const video = await Video.findOne({ _id: req.params.id, tenantId: req.tenantId }).lean();
     if (!video) return res.status(404).json({ error: 'Not found' });
     res.json(video);
   } catch (err) {
@@ -17,7 +27,7 @@ exports.getVideoById = async (req, res) => {
 exports.getVideos = async (req, res) => {
   try {
     const { campaign, platform, status } = req.query;
-    const filter = {};
+    const filter = videoFilter(req, {});
     if (campaign) filter.campaign = campaign;
     if (platform) filter.platform = platform;
     if (status) filter.status = status;
@@ -38,6 +48,7 @@ exports.addVideo = async (req, res) => {
   try {
     const payload = buildVideoCreatePayload(req.body, {
       defaultInitiatedBy: normaliseInitiatedBy(req.body.initiatedBy),
+      tenantId: req.tenantId,
     });
     if (!payload) return res.status(400).json({ error: 'url is required' });
     const video = await Video.create(payload);
@@ -57,6 +68,11 @@ exports.addBulkVideos = async (req, res) => {
     if (!Array.isArray(urls) || urls.length === 0) {
       return res.status(400).json({ error: 'urls array is required' });
     }
+    if (urls.length > BULK_MAX_URLS) {
+      return res.status(400).json({
+        error: `Too many URLs (max ${BULK_MAX_URLS}). Split into smaller batches or raise BULK_MAX_URLS.`,
+      });
+    }
 
     const defaultInit = normaliseInitiatedBy(bulkInitiatedBy);
 
@@ -67,6 +83,7 @@ exports.addBulkVideos = async (req, res) => {
         const raw = typeof entry === 'string' ? { url: entry } : entry;
         const createPayload = buildVideoCreatePayload(raw, {
           defaultInitiatedBy: defaultInit,
+          tenantId: req.tenantId,
         });
         if (!createPayload) continue;
         await Video.create(createPayload);
@@ -81,7 +98,6 @@ exports.addBulkVideos = async (req, res) => {
     }
 
     res.status(201).json(results);
-    console.log(results);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -90,7 +106,13 @@ exports.addBulkVideos = async (req, res) => {
 // DELETE /api/videos/:id — also removes all scrape history so Dashboard / analytics stay in sync
 exports.deleteVideo = async (req, res) => {
   try {
-    const video = await Video.findByIdAndDelete(req.params.id);
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    const video = await Video.findOneAndDelete({
+      _id: req.params.id,
+      tenantId: req.tenantId,
+    });
     if (!video) return res.status(404).json({ error: 'Not found' });
     await VideoMetric.deleteMany({ videoId: video._id });
     res.json({ message: 'Deleted' });
@@ -101,14 +123,19 @@ exports.deleteVideo = async (req, res) => {
 
 function platformFromUrl(u) {
   if (!u || typeof u !== 'string') return 'unknown';
-  if (u.includes('instagram.com') || u.includes('instagr.am')) return 'instagram';
-  if (u.includes('tiktok.com') || u.includes('vm.tiktok.com')) return 'tiktok';
+  const s = u.toLowerCase();
+  if (s.includes('instagram.com') || s.includes('instagr.am')) return 'instagram';
+  if (s.includes('tiktok.com') || s.includes('vm.tiktok.com')) return 'tiktok';
+  if (s.includes('facebook.com') || s.includes('fb.com') || s.includes('fb.watch')) return 'facebook';
   return 'unknown';
 }
 
 // PATCH /api/videos/:id – partial update (url, creator, campaign, offerCode, sales, initiatedBy, …)
 exports.updateVideo = async (req, res) => {
   try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
     const allowed = [
       'creator',
       'campaign',
@@ -143,7 +170,7 @@ exports.updateVideo = async (req, res) => {
         patch.platform = platformFromUrl(u);
       } else if (k === 'platform') {
         const p = String(req.body[k] || '').trim().toLowerCase();
-        if (p === 'instagram' || p === 'tiktok' || p === 'unknown') patch.platform = p;
+        if (p === 'instagram' || p === 'tiktok' || p === 'facebook' || p === 'unknown') patch.platform = p;
       } else if (k === 'initiatedBy') {
         patch[k] = normaliseInitiatedBy(req.body[k]);
       } else if (k === 'publishDate') {
@@ -169,10 +196,14 @@ exports.updateVideo = async (req, res) => {
     if (Object.keys(patch).length === 0) {
       return res.status(400).json({ error: 'No updatable fields' });
     }
-    const video = await Video.findByIdAndUpdate(req.params.id, patch, {
-      new: true,
-      runValidators: true,
-    });
+    const video = await Video.findOneAndUpdate(
+      { _id: req.params.id, tenantId: req.tenantId },
+      patch,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
     if (!video) return res.status(404).json({ error: 'Not found' });
     if (patch.url != null) {
       await VideoMetric.updateMany({ videoId: video._id }, { $set: { url: video.url } });
@@ -189,12 +220,19 @@ exports.updateVideo = async (req, res) => {
 // PATCH /api/videos/:id/status – toggle active/paused
 exports.updateStatus = async (req, res) => {
   try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
     const { status } = req.body;
-    const video = await Video.findByIdAndUpdate(
-      req.params.id,
+    if (!['active', 'paused', 'error'].includes(status)) {
+      return res.status(400).json({ error: 'status must be active, paused, or error' });
+    }
+    const video = await Video.findOneAndUpdate(
+      { _id: req.params.id, tenantId: req.tenantId },
       { status },
       { new: true }
     );
+    if (!video) return res.status(404).json({ error: 'Not found' });
     res.json(video);
   } catch (err) {
     res.status(500).json({ error: err.message });

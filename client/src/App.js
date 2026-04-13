@@ -1,14 +1,14 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import Navbar from './components/Navbar';
-import Dashboard from './pages/Dashboard';
-import BulkUpload from './pages/BulkUpload';
-import VideoDetail from './pages/VideoDetail';
-import VideosList from './pages/VideosList';
-import CampaignManager from './pages/CampaignManager';
-import CreatorOfferMappings from './pages/CreatorOfferMappings';
-import Analytics from './pages/Analytics';
+import RequireAuth from './components/RequireAuth';
+import RootRedirect from './components/RootRedirect';
+import Login from './pages/Login';
+import Apply from './pages/Apply';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminApplications from './pages/admin/AdminApplications';
+import AdminUsers from './pages/AdminUsers';
+import TenantShell from './pages/TenantShell';
 
 function App() {
   return (
@@ -33,22 +33,39 @@ function App() {
           },
         }}
       />
-      <div className="app-layout">
-        <Navbar />
-        <main className="main-content">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/overview" element={<Navigate to="/" replace />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/campaigns" element={<CampaignManager />} />
-            <Route path="/videos" element={<VideosList />} />
-            <Route path="/upload" element={<BulkUpload />} />
-            <Route path="/creator-offers" element={<CreatorOfferMappings />} />
-            <Route path="/video/:id" element={<VideoDetail />} />
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
-        </main>
-      </div>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/apply" element={<Apply />} />
+        <Route
+          path="/admin"
+          element={
+            <RequireAuth requireAdmin>
+              <AdminLayout />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<Navigate to="applications" replace />} />
+          <Route path="applications" element={<AdminApplications />} />
+          <Route path="users" element={<AdminUsers />} />
+        </Route>
+        <Route
+          path="/:tenant/*"
+          element={
+            <RequireAuth>
+              <TenantShell />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/"
+          element={
+            <RequireAuth>
+              <RootRedirect />
+            </RequireAuth>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </Router>
   );
 }

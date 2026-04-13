@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
 const campaignSchema = new mongoose.Schema({
+  tenantId: {
+    type: String,
+    required: true,
+    default: 'default',
+    index: true,
+  },
   country: {
     type: String,
     enum: ['SG', 'MY', 'KH'],
@@ -45,6 +51,6 @@ const campaignSchema = new mongoose.Schema({
   },
 });
 
-campaignSchema.index({ country: 1, lob: 1, dateLive: -1 });
+campaignSchema.index({ tenantId: 1, country: 1, lob: 1, dateLive: -1 });
 
 module.exports = mongoose.model('Campaign', campaignSchema);

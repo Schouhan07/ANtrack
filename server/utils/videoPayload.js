@@ -1,7 +1,16 @@
+function platformFromUrl(u) {
+  if (!u || typeof u !== 'string') return null;
+  const s = u.toLowerCase();
+  if (s.includes('instagram.com') || s.includes('instagr.am')) return 'instagram';
+  if (s.includes('tiktok.com') || s.includes('vm.tiktok.com')) return 'tiktok';
+  if (s.includes('facebook.com') || s.includes('fb.com') || s.includes('fb.watch')) return 'facebook';
+  return null;
+}
+
 /**
  * Normalise optional video fields from API / bulk row bodies.
  * @param {Record<string, unknown>} raw
- * @param {{ defaultInitiatedBy?: 'brand'|'supply' }} [opts]
+ * @param {{ defaultInitiatedBy?: 'brand'|'supply', tenantId?: string }} [opts]
  */
 function buildVideoCreatePayload(raw, opts = {}) {
   const defaultInit = opts.defaultInitiatedBy === 'supply' ? 'supply' : 'brand';
@@ -19,6 +28,7 @@ function buildVideoCreatePayload(raw, opts = {}) {
   if (!creator && influencerName) creator = influencerName;
 
   const payload = {
+    ...(opts.tenantId ? { tenantId: opts.tenantId } : {}),
     url,
     creator,
     campaign: raw.campaign != null ? String(raw.campaign).trim() : '',
@@ -54,7 +64,11 @@ function buildVideoCreatePayload(raw, opts = {}) {
 
   if (raw.platform != null && String(raw.platform).trim()) {
     const p = String(raw.platform).trim().toLowerCase();
-    if (p === 'instagram' || p === 'tiktok') payload.platform = p;
+    if (p === 'instagram' || p === 'tiktok' || p === 'facebook') payload.platform = p;
+  }
+  if (!payload.platform) {
+    const inferred = platformFromUrl(url);
+    if (inferred) payload.platform = inferred;
   }
 
   return payload;

@@ -1,15 +1,20 @@
 const mongoose = require('mongoose');
 
 const videoSchema = new mongoose.Schema({
+  tenantId: {
+    type: String,
+    required: true,
+    default: 'default',
+    index: true,
+  },
   url: {
     type: String,
     required: true,
-    unique: true,
     trim: true,
   },
   platform: {
     type: String,
-    enum: ['instagram', 'tiktok', 'unknown'],
+    enum: ['instagram', 'tiktok', 'facebook', 'unknown'],
     default: 'unknown',
   },
   creator: {
@@ -91,13 +96,18 @@ const videoSchema = new mongoose.Schema({
  */
 videoSchema.pre('save', function (next) {
   if (this.platform === 'unknown' || !this.platform) {
-    if (this.url.includes('instagram.com') || this.url.includes('instagr.am')) {
+    const u = String(this.url || '').toLowerCase();
+    if (u.includes('instagram.com') || u.includes('instagr.am')) {
       this.platform = 'instagram';
-    } else if (this.url.includes('tiktok.com') || this.url.includes('vm.tiktok.com')) {
+    } else if (u.includes('tiktok.com') || u.includes('vm.tiktok.com')) {
       this.platform = 'tiktok';
+    } else if (u.includes('facebook.com') || u.includes('fb.com') || u.includes('fb.watch')) {
+      this.platform = 'facebook';
     }
   }
   next();
 });
+
+videoSchema.index({ tenantId: 1, url: 1 }, { unique: true });
 
 module.exports = mongoose.model('Video', videoSchema);

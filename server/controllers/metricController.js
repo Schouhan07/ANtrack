@@ -2,14 +2,15 @@ const VideoMetric = require('../models/VideoMetric');
 const Video = require('../models/Video');
 const CreatorOfferMapping = require('../models/CreatorOfferMapping');
 const { runScrapeJob } = require('../cron/scraper');
+const { isValidObjectId } = require('../utils/mongoId');
 
 /**
  * Per calendar day: take the latest scrape per video that day, then sum across videos.
  * Avoids summing cumulative view counts multiple times when several scrapes run the same day.
  */
-function dailyPortfolioTotalsPipeline(since) {
+function dailyPortfolioTotalsPipeline(since, tenantId) {
   return [
-    { $match: { scrapedAt: { $gte: since } } },
+    { $match: { scrapedAt: { $gte: since }, tenantId } },
     { $sort: { scrapedAt: -1 } },
     {
       $group: {
@@ -51,7 +52,10 @@ function nonNeg(n) {
 exports.getMetrics = async (req, res) => {
   try {
     const { videoId, days } = req.query;
-    const filter = {};
+    if (videoId && !isValidObjectId(String(videoId))) {
+      return res.status(400).json({ error: 'Invalid videoId' });
+    }
+    const filter = { tenantId: req.tenantId };
     if (videoId) filter.videoId = videoId;
     if (days) {
       const since = new Date();
@@ -76,6 +80,7 @@ exports.getMetrics = async (req, res) => {
 exports.getLatestMetrics = async (req, res) => {
   try {
     const rolled = await VideoMetric.aggregate([
+      { $match: { tenantId: req.tenantId } },
       { $sort: { scrapedAt: -1 } },
       {
         $group: {
@@ -104,7 +109,7 @@ exports.getLatestMetrics = async (req, res) => {
     ]);
 
     const videoIds = rolled.map((r) => r.videoId);
-    const videos = await Video.find({ _id: { $in: videoIds } }).lean();
+    const videos = await Video.find({ _id: { $in: videoIds }, tenantId: req.tenantId }).lean();
     const videoMap = {};
     for (const v of videos) videoMap[v._id.toString()] = v;
 
@@ -162,11 +167,11 @@ exports.getLatestMetrics = async (req, res) => {
 // GET /api/metrics/campaign-overview
 exports.getCampaignOverview = async (req, res) => {
   try {
-    const videos = await Video.find({ status: 'active' }).lean();
+    const videos = await Video.find({ status: 'active', tenantId: req.tenantId }).lean();
     const videoIds = videos.map((v) => v._id);
 
     const latest = await VideoMetric.aggregate([
-      { $match: { videoId: { $in: videoIds } } },
+      { $match: { videoId: { $in: videoIds }, tenantId: req.tenantId } },
       { $sort: { scrapedAt: -1 } },
       {
         $group: {
@@ -180,7 +185,7 @@ exports.getCampaignOverview = async (req, res) => {
       },
     ]);
 
-    const portfolio = await computePortfolioRunComparison();
+    const portfolio = await computePortfolioRunComparison(req.tenantId);
 
     const totalVideos = videos.length;
 
@@ -252,13 +257,13 @@ exports.getCampaignOverview = async (req, res) => {
  */
 exports.getPlatformAnalytics = async (req, res) => {
   try {
-    const videos = await Video.find({ status: 'active' }).lean();
+    const videos = await Video.find({ status: 'active', tenantId: req.tenantId }).lean();
     const videoIds = videos.map((v) => v._id);
     const videoById = {};
     for (const v of videos) videoById[v._id.toString()] = v;
 
     const latest = await VideoMetric.aggregate([
-      { $match: { videoId: { $in: videoIds } } },
+      { $match: { videoId: { $in: videoIds }, tenantId: req.tenantId } },
       { $sort: { scrapedAt: -1 } },
       {
         $group: {
@@ -348,7 +353,7 @@ exports.getWeeklyTrend = async (req, res) => {
     since.setDate(since.getDate() - weeks * 7);
 
     const raw = await VideoMetric.aggregate([
-      { $match: { scrapedAt: { $gte: since } } },
+      { $match: { scrapedAt: { $gte: since }, tenantId: req.tenantId } },
       {
         $group: {
           _id: {
@@ -385,7 +390,7 @@ exports.getDailyViews = async (req, res) => {
     since.setDate(since.getDate() - days);
 
     const data = await VideoMetric.aggregate([
-      ...dailyPortfolioTotalsPipeline(since),
+      ...dailyPortfolioTotalsPipeline(since, req.tenantId),
       {
         $project: {
           _id: 1,
@@ -410,7 +415,7 @@ exports.getDailyBreakdown = async (req, res) => {
     const since = new Date();
     since.setDate(since.getDate() - days);
 
-    const data = await VideoMetric.aggregate(dailyPortfolioTotalsPipeline(since));
+    const data = await VideoMetric.aggregate(dailyPortfolioTotalsPipeline(since, req.tenantId));
 
     const rows = data.map((d) => ({
       date: d._id,
@@ -431,8 +436,8 @@ exports.getDailyBreakdown = async (req, res) => {
  * Portfolio totals: sum of each active video's latest scrape vs second-latest (new run − last run).
  * Only videos with ≥2 metric rows are included so both sums are comparable.
  */
-async function computePortfolioRunComparison() {
-  const activeVideos = await Video.find({ status: 'active' }).select('_id').lean();
+async function computePortfolioRunComparison(tenantId) {
+  const activeVideos = await Video.find({ status: 'active', tenantId }).select('_id').lean();
   const ids = activeVideos.map((v) => v._id);
   if (ids.length === 0) {
     return {
@@ -445,7 +450,7 @@ async function computePortfolioRunComparison() {
   }
 
   const rolled = await VideoMetric.aggregate([
-    { $match: { videoId: { $in: ids } } },
+    { $match: { videoId: { $in: ids }, tenantId } },
     { $sort: { scrapedAt: -1 } },
     {
       $group: {
@@ -543,7 +548,7 @@ exports.computePortfolioRunComparison = computePortfolioRunComparison;
 
 exports.getPortfolioRunComparison = async (req, res) => {
   try {
-    const data = await computePortfolioRunComparison();
+    const data = await computePortfolioRunComparison(req.tenantId);
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -555,7 +560,7 @@ exports.getPortfolioRunComparison = async (req, res) => {
  */
 exports.getDashboardKpis = async (req, res) => {
   try {
-    const portfolio = await computePortfolioRunComparison();
+    const portfolio = await computePortfolioRunComparison(req.tenantId);
     const now = new Date();
     const last7 = new Date(now);
     last7.setDate(last7.getDate() - 7);
@@ -563,13 +568,18 @@ exports.getDashboardKpis = async (req, res) => {
     prev7Start.setDate(prev7Start.getDate() - 14);
 
     const [videosNewLast7d, videosNewPrior7d, costRow] = await Promise.all([
-      Video.countDocuments({ status: 'active', addedDate: { $gte: last7 } }),
       Video.countDocuments({
         status: 'active',
+        tenantId: req.tenantId,
+        addedDate: { $gte: last7 },
+      }),
+      Video.countDocuments({
+        status: 'active',
+        tenantId: req.tenantId,
         addedDate: { $gte: prev7Start, $lt: last7 },
       }),
       Video.aggregate([
-        { $match: { status: 'active' } },
+        { $match: { status: 'active', tenantId: req.tenantId } },
         {
           $group: {
             _id: null,
@@ -622,11 +632,12 @@ exports.getDashboardKpis = async (req, res) => {
 // GET /api/metrics/top-creators
 exports.getTopCreators = async (req, res) => {
   try {
-    const videos = await Video.find({ status: 'active' }).lean();
+    const videos = await Video.find({ status: 'active', tenantId: req.tenantId }).lean();
     const videoMap = {};
     for (const v of videos) videoMap[v._id.toString()] = v;
 
     const latest = await VideoMetric.aggregate([
+      { $match: { tenantId: req.tenantId } },
       { $sort: { scrapedAt: -1 } },
       {
         $group: {
@@ -662,11 +673,12 @@ exports.getTopCreators = async (req, res) => {
 // GET /api/metrics/influencers – per-creator rollup for Creators tab + drill-down
 exports.getInfluencerInsights = async (req, res) => {
   try {
-    const videos = await Video.find({ status: 'active' }).lean();
+    const videos = await Video.find({ status: 'active', tenantId: req.tenantId }).lean();
     const videoById = {};
     for (const v of videos) videoById[v._id.toString()] = v;
 
     const latest = await VideoMetric.aggregate([
+      { $match: { tenantId: req.tenantId } },
       { $sort: { scrapedAt: -1 } },
       {
         $group: {
@@ -722,6 +734,7 @@ exports.getInfluencerInsights = async (req, res) => {
     prevStart.setDate(prevStart.getDate() - 14);
 
     const facetResult = await VideoMetric.aggregate([
+      { $match: { tenantId: req.tenantId } },
       {
         $lookup: {
           from: 'videos',
@@ -731,7 +744,7 @@ exports.getInfluencerInsights = async (req, res) => {
         },
       },
       { $unwind: '$vid' },
-      { $match: { 'vid.status': 'active' } },
+      { $match: { 'vid.status': 'active', 'vid.tenantId': req.tenantId } },
       {
         $addFields: {
           creator: {
@@ -763,7 +776,7 @@ exports.getInfluencerInsights = async (req, res) => {
     const last7Map = Object.fromEntries(last7Rows.map((x) => [x._id, x.views]));
     const prev7Map = Object.fromEntries(prev7Rows.map((x) => [x._id, x.views]));
 
-    const mappingDocs = await CreatorOfferMapping.find().lean();
+    const mappingDocs = await CreatorOfferMapping.find({ tenantId: req.tenantId }).lean();
     const mappingByCreatorLower = new Map();
     for (const mo of mappingDocs) {
       const key = String(mo.creatorName || '').trim().toLowerCase();
@@ -932,7 +945,7 @@ exports.getInfluencerInsights = async (req, res) => {
 // POST /api/metrics/scrape-now – trigger manual scrape
 exports.scrapeNow = async (req, res) => {
   try {
-    const result = await runScrapeJob();
+    const result = await runScrapeJob({ tenantId: req.tenantId });
     res.json({ message: 'Scrape completed', ...result });
   } catch (err) {
     res.status(500).json({ error: err.message });

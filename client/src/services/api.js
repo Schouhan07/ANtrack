@@ -7,6 +7,39 @@ const baseURL = origin ? `${origin}/api` : '/api';
 
 const API = axios.create({ baseURL });
 
+export { API };
+
+const RESERVED_FIRST_SEGMENTS = new Set(['login', 'admin', 'apply', '']);
+
+function tenantFromPath() {
+  const seg = window.location.pathname.replace(/^\/+|\/+$/g, '').split('/')[0] || '';
+  if (!seg || RESERVED_FIRST_SEGMENTS.has(seg)) return null;
+  return seg;
+}
+
+API.interceptors.request.use((config) => {
+  const tid = tenantFromPath();
+  if (tid) config.headers['X-Tenant-Id'] = tid;
+  const token = localStorage.getItem('antrack_token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export const loginRequest = (email, password) =>
+  API.post('/auth/login', { email, password });
+export const fetchMe = () => API.get('/auth/me');
+export const listAdminUsers = () => API.get('/admin/users');
+export const createAdminUser = (body) => API.post('/admin/users', body);
+export const updateAdminUser = (id, body) => API.patch(`/admin/users/${id}`, body);
+export const fetchTenantsMeta = () => API.get('/tenants');
+export const submitAccessRequest = (body) => API.post('/access-requests', body);
+export const listAccessApplications = (params) =>
+  API.get('/admin/applications', { params });
+export const approveAccessApplication = (id) =>
+  API.patch(`/admin/applications/${id}/approve`);
+export const rejectAccessApplication = (id, body) =>
+  API.patch(`/admin/applications/${id}/reject`, body);
+
 // ── Videos ──────────────────────────────────────
 export const fetchVideos = (params) => API.get('/videos', { params });
 export const fetchVideoById = (id) => API.get(`/videos/${id}`);
@@ -53,8 +86,6 @@ export const uploadExcel = (file) => {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 };
-export const importGoogleSheet = (sheetUrl) =>
-  API.post('/upload/google-sheet', { sheetUrl });
 
 // ── Campaigns ───────────────────────────────────
 export const fetchCampaigns = (params) => API.get('/campaigns', { params });

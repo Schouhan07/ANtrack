@@ -1,21 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import {
-  addVideo,
-  addBulkVideos,
-  uploadExcel,
-  importGoogleSheet,
-} from '../services/api';
+import { addVideo, addBulkVideos, uploadExcel } from '../services/api';
 
 const ADD_VIDEO_STEPS = [
   { key: 'publishDate', label: 'Video Publish Date', type: 'date' },
   { key: 'influencerName', label: 'Influencer Name', type: 'text', placeholder: 'Display name' },
-  { key: 'influencerHandle', label: 'Influencer Handle', type: 'text', placeholder: '@handle' },
   { key: 'url', label: 'Post URL', type: 'text', placeholder: 'TikTok or Instagram post URL', required: true },
-  { key: 'platform', label: 'Platform', type: 'platform' },
   { key: 'lob', label: 'Line of Business', type: 'lob' },
-  { key: 'videoDuration', label: 'Video Duration', type: 'text', placeholder: 'e.g. 0:45 or 45s' },
-  { key: 'totalCost', label: 'Total Cost (in RM)', type: 'number', placeholder: 'Optional' },
+  { key: 'totalCost', label: 'Total Cost (in $)', type: 'number', placeholder: 'Optional' },
   { key: 'offerCode', label: 'Coupon code used', type: 'text', placeholder: 'Offer / promo code' },
 ];
 
@@ -23,6 +15,7 @@ function platformGuessFromUrl(u) {
   const s = String(u || '').toLowerCase();
   if (s.includes('instagram.com') || s.includes('instagr.am')) return 'instagram';
   if (s.includes('tiktok.com') || s.includes('vm.tiktok.com')) return 'tiktok';
+  if (s.includes('facebook.com') || s.includes('fb.com') || s.includes('fb.watch')) return 'facebook';
   return '';
 }
 
@@ -31,11 +24,7 @@ function AddVideoWaterfall({ initiatedBy, loading, setLoading }) {
     () => Object.fromEntries(ADD_VIDEO_STEPS.map((s) => [s.key, ''])),
     []
   );
-  const [step, setStep] = useState(0); // kept for compatibility with existing logic, not used in form layout
   const [form, setForm] = useState(emptyForm);
-
-  const current = ADD_VIDEO_STEPS[step];
-  const total = ADD_VIDEO_STEPS.length;
 
   const setField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -52,20 +41,18 @@ function AddVideoWaterfall({ initiatedBy, loading, setLoading }) {
         totalCostRaw === '' || totalCostRaw == null
           ? undefined
           : Number(totalCostRaw);
+      const platform = platformGuessFromUrl(url) || undefined;
       await addVideo({
         url,
-        platform: form.platform || undefined,
+        ...(platform ? { platform } : {}),
         publishDate: form.publishDate || undefined,
         influencerName: form.influencerName.trim() || undefined,
-        influencerHandle: form.influencerHandle.trim() || undefined,
         lob: form.lob || undefined,
-        videoDuration: form.videoDuration.trim() || undefined,
         totalCost: Number.isNaN(totalCost) ? undefined : totalCost,
         offerCode: form.offerCode.trim() || undefined,
         initiatedBy,
       });
       toast.success('Video added to tracking');
-      setStep(0);
       setForm({ ...emptyForm });
       window.dispatchEvent(new CustomEvent('videos-updated', { detail: {} }));
     } catch (err) {
@@ -75,25 +62,12 @@ function AddVideoWaterfall({ initiatedBy, loading, setLoading }) {
     }
   };
 
-  const goNext = () => {
-    if (current.key === 'url' && !String(form.url || '').trim()) {
-      toast.error('Enter the post URL');
-      return;
-    }
-    if (current.key === 'url') {
-      const g = platformGuessFromUrl(form.url);
-      if (g && !form.platform) setField('platform', g);
-    }
-    setStep((s) => Math.min(s + 1, ADD_VIDEO_STEPS.length - 1));
-  };
-
-  const goBack = () => setStep((s) => Math.max(0, s - 1));
-
   return (
     <div className="upload-card">
       <h3>Add Single Video</h3>
       <p className="bulk-initiated-hint">
-        Fill in the video details below. Platform is auto-detected from URL when possible.
+        Platform is inferred from the post URL (TikTok, Instagram, or Facebook). Creator details can
+        still sync after the first scrape where supported.
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -105,26 +79,15 @@ function AddVideoWaterfall({ initiatedBy, loading, setLoading }) {
             </label>
 
             {field.type === 'text' && (
-  <input
-    id={`video-${field.key}`}
-    type="text"
-    value={form[field.key]}
-    onChange={(e) => {
-      const newUrl = e.target.value;
-      setField(field.key, newUrl);
-      
-      // Auto-detect platform from URL
-      if (field.key === 'url' && newUrl.trim()) {
-        const detectedPlatform = platformGuessFromUrl(newUrl);
-        if (detectedPlatform && !form.platform) {
-          setField('platform', detectedPlatform);
-        }
-      }
-    }}
-    placeholder={field.placeholder || ''}
-    autoComplete="off"
-  />
-)}
+              <input
+                id={`video-${field.key}`}
+                type="text"
+                value={form[field.key]}
+                onChange={(e) => setField(field.key, e.target.value)}
+                placeholder={field.placeholder || ''}
+                autoComplete="off"
+              />
+            )}
 
             {field.type === 'date' && (
               <input
@@ -145,18 +108,6 @@ function AddVideoWaterfall({ initiatedBy, loading, setLoading }) {
                 onChange={(e) => setField(field.key, e.target.value)}
                 placeholder={field.placeholder || ''}
               />
-            )}
-
-            {field.type === 'platform' && (
-              <select
-                id={`video-${field.key}`}
-                value={form.platform || ''}
-                onChange={(e) => setField('platform', e.target.value)}
-              >
-                <option value="">Auto (from URL)</option>
-                <option value="tiktok">TikTok</option>
-                <option value="instagram">Instagram</option>
-              </select>
             )}
 
             {field.type === 'lob' && (
@@ -186,30 +137,41 @@ function AddVideoWaterfall({ initiatedBy, loading, setLoading }) {
   );
 }
 
+function urlLines(text) {
+  return String(text || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+
 export default function BulkUpload() {
   const [tiktokUrls, setTiktokUrls] = useState('');
   const [instagramUrls, setInstagramUrls] = useState('');
+  const [facebookUrls, setFacebookUrls] = useState('');
   const [initiatedBy, setInitiatedBy] = useState('brand');
   const [file, setFile] = useState(null);
-  const [sheetUrl, setSheetUrl] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const submitUrls = async (text, platform) => {
-    const lines = text
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
-    if (lines.length === 0) return toast.error('Paste at least one URL');
+  const submitBulkUrls = async () => {
+    const urls = [
+      ...urlLines(tiktokUrls).map((url) => ({ url, platform: 'tiktok' })),
+      ...urlLines(instagramUrls).map((url) => ({ url, platform: 'instagram' })),
+      ...urlLines(facebookUrls).map((url) => ({ url, platform: 'facebook' })),
+    ];
+    if (urls.length === 0) {
+      toast.error('Paste at least one URL in TikTok, Instagram, or Facebook');
+      return;
+    }
 
     setLoading(true);
     try {
-      const urls = lines.map((url) => ({ url, platform }));
       const res = await addBulkVideos({ urls, initiatedBy });
       setResult(res.data);
-      toast.success(`Added ${res.data.added} ${platform} videos`);
-      if (platform === 'tiktok') setTiktokUrls('');
-      else setInstagramUrls('');
+      toast.success(`Added ${res.data.added} video${res.data.added === 1 ? '' : 's'}`);
+      setTiktokUrls('');
+      setInstagramUrls('');
+      setFacebookUrls('');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed');
     } finally {
@@ -227,21 +189,6 @@ export default function BulkUpload() {
       setFile(null);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Upload failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSheetSubmit = async () => {
-    if (!sheetUrl.trim()) return toast.error('Enter a Google Sheet URL');
-    setLoading(true);
-    try {
-      const res = await importGoogleSheet(sheetUrl.trim());
-      setResult(res.data);
-      toast.success(`Imported ${res.data.added} videos from Google Sheet`);
-      setSheetUrl('');
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Import failed');
     } finally {
       setLoading(false);
     }
@@ -296,87 +243,78 @@ export default function BulkUpload() {
         </div>
       )}
 
-      {/* ── TikTok URLs ────────────────── */}
-      <div className="upload-card">
-        <h3>
-          <span className="badge badge-tiktok" style={{ marginRight: 8 }}>TikTok</span>
-          Paste TikTok URLs (one per line)
-        </h3>
-        <textarea
-          placeholder={'https://www.tiktok.com/@user/video/123456789\nhttps://www.tiktok.com/@user/video/987654321'}
-          value={tiktokUrls}
-          onChange={(e) => setTiktokUrls(e.target.value)}
-        />
-        <button
-          className="btn btn-primary mt-12"
-          disabled={loading}
-          onClick={() => submitUrls(tiktokUrls, 'tiktok')}
-        >
-          {loading ? 'Submitting…' : 'Submit TikTok URLs'}
+      <div className="upload-card bulk-urls-card">
+        <h3>URLs</h3>
+        <p className="bulk-initiated-hint" style={{ marginTop: 0 }}>
+          Paste post links below—one URL per line per platform. Submit once to add every non-empty box.
+        </p>
+        <div className="bulk-url-platform-grid">
+          <div className="form-group bulk-url-platform-field">
+            <label htmlFor="bulk-url-tiktok">
+              <span className="badge badge-tiktok bulk-url-badge">TikTok</span>
+            </label>
+            <textarea
+              id="bulk-url-tiktok"
+              rows={5}
+              placeholder={
+                'https://www.tiktok.com/@user/video/123456789\nhttps://www.tiktok.com/@user/video/987654321'
+              }
+              value={tiktokUrls}
+              onChange={(e) => setTiktokUrls(e.target.value)}
+            />
+          </div>
+          <div className="form-group bulk-url-platform-field">
+            <label htmlFor="bulk-url-instagram">
+              <span className="badge badge-instagram bulk-url-badge">Instagram</span>
+            </label>
+            <textarea
+              id="bulk-url-instagram"
+              rows={5}
+              placeholder={
+                'https://www.instagram.com/reel/ABC123/\nhttps://www.instagram.com/reel/XYZ789/'
+              }
+              value={instagramUrls}
+              onChange={(e) => setInstagramUrls(e.target.value)}
+            />
+          </div>
+          <div className="form-group bulk-url-platform-field">
+            <label htmlFor="bulk-url-facebook">
+              <span className="badge badge-facebook bulk-url-badge">Facebook</span>
+            </label>
+            <textarea
+              id="bulk-url-facebook"
+              rows={5}
+              placeholder={'https://www.facebook.com/reel/...\nhttps://fb.watch/...'}
+              value={facebookUrls}
+              onChange={(e) => setFacebookUrls(e.target.value)}
+            />
+          </div>
+        </div>
+        <button className="btn btn-primary mt-12" disabled={loading} onClick={submitBulkUrls}>
+          {loading ? 'Submitting…' : 'Submit URLs'}
         </button>
       </div>
 
-      {/* ── Instagram URLs ─────────────── */}
       <div className="upload-card">
-        <h3>
-          <span className="badge badge-instagram" style={{ marginRight: 8 }}>Instagram</span>
-          Paste Instagram Reel URLs (one per line)
-        </h3>
-        <textarea
-          placeholder={'https://www.instagram.com/reel/ABC123/\nhttps://www.instagram.com/reel/XYZ789/'}
-          value={instagramUrls}
-          onChange={(e) => setInstagramUrls(e.target.value)}
-        />
-        <button
-          className="btn btn-primary mt-12"
-          disabled={loading}
-          onClick={() => submitUrls(instagramUrls, 'instagram')}
-        >
-          {loading ? 'Submitting…' : 'Submit Instagram URLs'}
-        </button>
-      </div>
-
-      {/* ── Upload Excel ───────────────── */}
-      {/* <div className="upload-card">
-        <h3>Upload Excel File (.xlsx)</h3>
-        <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: 12 }}>
-          Required: URL. Optional: Creator, Campaign, Platform, InitiatedBy, Created By, Publish Date,
-          Influencer Name, Influencer Handle, LOB, Video Duration, Total Cost, Coupon code used, Sales.
+        <h3>Upload Excel (.xlsx, .xls, .csv)</h3>
+        <p className="bulk-initiated-hint" style={{ marginTop: 0 }}>
+          First sheet is read. Required column: <strong>URL</strong>. Optional: Creator, Campaign,
+          Platform (tiktok / instagram / facebook), InitiatedBy, Created By, Publish Date, Influencer Name,
+          Influencer Handle, LOB, Video Duration, Total Cost, Coupon code used, Sales.
         </p>
         <input
           type="file"
           accept=".xlsx,.xls,.csv"
-          onChange={(e) => setFile(e.target.files[0])}
+          onChange={(e) => setFile(e.target.files?.[0] || null)}
         />
         <button
           className="btn btn-primary mt-12"
           disabled={loading || !file}
           onClick={handleFileSubmit}
         >
-          {loading ? 'Uploading…' : 'Upload & Import'}
+          {loading ? 'Uploading…' : 'Upload & import'}
         </button>
       </div>
-
-      {/* ── Google Sheet ───────────────── */}
-      <div className="upload-card">
-        <h3>Import from Google Sheet</h3>
-        <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: 12 }}>
-          Sheet must be public. Same columns as Excel (URL required; extended fields optional).
-        </p>
-        <input
-          type="text"
-          placeholder="https://docs.google.com/spreadsheets/d/..."
-          value={sheetUrl}
-          onChange={(e) => setSheetUrl(e.target.value)}
-        />
-        <button
-          className="btn btn-primary mt-12"
-          disabled={loading || !sheetUrl.trim()}
-          onClick={handleSheetSubmit}
-        >
-          {loading ? 'Importing…' : 'Import from Sheet'}
-        </button>
-      </div> 
     </div>
   );
 }

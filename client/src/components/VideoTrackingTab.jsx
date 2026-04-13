@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTenantPath } from '../hooks/useTenantPath';
 import toast from 'react-hot-toast';
 import { FiDownload, FiPlus, FiPlay, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { fetchDashboardKpis, fetchLatestMetrics } from '../services/api';
@@ -136,6 +137,7 @@ function VideoTrackingSortTh({ field, label, numeric, sortField, sortOrder, onSo
 
 export default function VideoTrackingTab() {
   const navigate = useNavigate();
+  const { withTenant } = useTenantPath();
   const [kpis, setKpis] = useState(null);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -431,7 +433,7 @@ export default function VideoTrackingTab() {
                   <tr
                     key={rowKey}
                     className="video-tracking-row"
-                    onClick={() => navigate(`/video/${r._id}`)}
+                    onClick={() => navigate(withTenant(`/video/${r._id}`))}
                   >
                     <td>
                       <div className="video-tracking-video-cell">

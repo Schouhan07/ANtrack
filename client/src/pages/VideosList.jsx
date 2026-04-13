@@ -153,6 +153,7 @@ export default function VideosList() {
                 >
                   <option value="tiktok">TikTok</option>
                   <option value="instagram">Instagram</option>
+                  <option value="facebook">Facebook</option>
                   <option value="unknown">Unknown</option>
                 </select>
               </div>
@@ -298,6 +299,7 @@ export default function VideosList() {
 
   const tiktokCount = videos.filter((v) => v.platform === 'tiktok').length;
   const igCount = videos.filter((v) => v.platform === 'instagram').length;
+  const fbCount = videos.filter((v) => v.platform === 'facebook').length;
 
   const filteredVideos = useMemo(() => {
     const q = urlQuery.trim().toLowerCase();
@@ -341,10 +343,14 @@ export default function VideosList() {
           <div className="label">Instagram</div>
           <div className="value">{igCount}</div>
         </div>
+        <div className="stat-card">
+          <div className="label">Facebook</div>
+          <div className="value">{fbCount}</div>
+        </div>
       </div>
 
       <div className="filter-bar videos-list-toolbar" style={{ marginBottom: 16 }}>
-        {['all', 'tiktok', 'instagram'].map((f) => (
+        {['all', 'tiktok', 'instagram', 'facebook'].map((f) => (
           <button
             key={f}
             className={`btn btn-sm ${filter === f ? 'btn-primary' : 'btn-secondary'}`}

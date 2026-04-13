@@ -1,25 +1,25 @@
 const crypto = require('crypto');
 const InsightCache = require('../models/InsightCache');
 
-const CACHE_KEY = 'default';
-
 function hashContext(context) {
   return crypto.createHash('sha256').update(JSON.stringify(context)).digest('hex');
 }
 
-async function loadCached() {
-  const doc = await InsightCache.findOne({ key: CACHE_KEY }).lean();
+async function loadCached(tenantKey) {
+  const key = tenantKey || 'default';
+  const doc = await InsightCache.findOne({ key }).lean();
   if (!doc || !Array.isArray(doc.insights) || doc.insights.length === 0) return null;
   return doc;
 }
 
 /**
- * @param {{ insights: unknown[], model: string, contextHash: string, generatedAt: Date }} payload
+ * @param {{ insights: unknown[], model: string, contextHash: string, generatedAt: Date, tenantKey: string }} payload
  */
 async function saveCached(payload) {
-  const { insights, model, contextHash, generatedAt } = payload;
+  const { insights, model, contextHash, generatedAt, tenantKey } = payload;
+  const key = tenantKey || 'default';
   await InsightCache.findOneAndUpdate(
-    { key: CACHE_KEY },
+    { key },
     {
       $set: {
         insights,
@@ -33,7 +33,6 @@ async function saveCached(payload) {
 }
 
 module.exports = {
-  CACHE_KEY,
   hashContext,
   loadCached,
   saveCached,

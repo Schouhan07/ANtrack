@@ -9,7 +9,7 @@ const MODEL_LABEL = () => process.env.GEMINI_MODEL || 'gemini-2.0-flash';
  */
 exports.getInsights = async (req, res) => {
   try {
-    const context = await buildInsightsContext();
+    const context = await buildInsightsContext(req.tenantId);
     if (!context.metricRowsCount && !context.activeVideoCount) {
       return res.json({
         insights: [],
@@ -30,6 +30,7 @@ exports.getInsights = async (req, res) => {
         model,
         contextHash,
         generatedAt,
+        tenantKey: req.tenantId,
       });
       return res.json({
         insights,
@@ -38,7 +39,7 @@ exports.getInsights = async (req, res) => {
         fromCache: false,
       });
     } catch (err) {
-      const cached = await loadCached();
+      const cached = await loadCached(req.tenantId);
       if (cached && Array.isArray(cached.insights) && cached.insights.length > 0) {
         console.error(
           '[insights] Live Gemini request failed; serving cached insights.',

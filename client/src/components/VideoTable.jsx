@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTenantPath } from '../hooks/useTenantPath';
 import { FiChevronLeft, FiChevronRight, FiTrendingUp, FiTrendingDown, FiMinus } from 'react-icons/fi';
 import { fetchLatestMetrics } from '../services/api';
 
@@ -55,6 +56,7 @@ export default function VideoTable() {
   const [rows, setRows] = useState([]);
   const [page, setPage] = useState(1);
   const navigate = useNavigate();
+  const { withTenant } = useTenantPath();
 
   const loadRows = () => {
     fetchLatestMetrics()
@@ -135,7 +137,7 @@ export default function VideoTable() {
                 <tr
                   key={r._id}
                   className="video-performance-row"
-                  onClick={() => navigate(`/video/${r._id}`)}
+                  onClick={() => navigate(withTenant(`/video/${r._id}`))}
                 >
                   <td className="url-cell">
                     <a

@@ -6,6 +6,12 @@ const mongoose = require('mongoose');
  */
 const creatorOfferMappingSchema = new mongoose.Schema(
   {
+    tenantId: {
+      type: String,
+      required: true,
+      default: 'default',
+      index: true,
+    },
     creatorName: {
       type: String,
       required: true,
@@ -36,5 +42,7 @@ creatorOfferMappingSchema.pre('validate', function (next) {
   }
   next();
 });
+
+creatorOfferMappingSchema.index({ tenantId: 1, offerCode: 1 }, { unique: true });
 
 module.exports = mongoose.model('CreatorOfferMapping', creatorOfferMappingSchema);

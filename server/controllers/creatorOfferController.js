@@ -1,12 +1,16 @@
 const Video = require('../models/Video');
 const CreatorOfferMapping = require('../models/CreatorOfferMapping');
+const { videoFilter } = require('../utils/tenantScope');
+const { isValidObjectId } = require('../utils/mongoId');
 
 /** Distinct creator handles from active videos (for dropdown) */
 exports.getCreatorNames = async (req, res) => {
   try {
     const raw = await Video.distinct('creator', {
-      status: 'active',
-      creator: { $nin: ['', null], $exists: true },
+      ...videoFilter(req, {
+        status: 'active',
+        creator: { $nin: ['', null], $exists: true },
+      }),
     });
     const names = raw
       .map((c) => String(c || '').trim())
@@ -20,7 +24,9 @@ exports.getCreatorNames = async (req, res) => {
 
 exports.list = async (req, res) => {
   try {
-    const rows = await CreatorOfferMapping.find({}).sort({ creatorName: 1, offerCode: 1 }).lean();
+    const rows = await CreatorOfferMapping.find({ tenantId: req.tenantId })
+      .sort({ creatorName: 1, offerCode: 1 })
+      .lean();
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -43,6 +49,7 @@ exports.create = async (req, res) => {
       salesVal = n;
     }
     const doc = await CreatorOfferMapping.create({
+      tenantId: req.tenantId,
       creatorName: String(creatorName).trim(),
       offerCode: String(offerCode).trim(),
       sales: salesVal,
@@ -58,6 +65,9 @@ exports.create = async (req, res) => {
 
 exports.update = async (req, res) => {
   try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
     const { creatorName, offerCode, sales } = req.body;
     const patch = {};
     if (creatorName !== undefined) patch.creatorName = String(creatorName).trim();
@@ -71,10 +81,14 @@ exports.update = async (req, res) => {
     if (Object.keys(patch).length === 0) {
       return res.status(400).json({ error: 'Nothing to update' });
     }
-    const doc = await CreatorOfferMapping.findByIdAndUpdate(req.params.id, patch, {
-      new: true,
-      runValidators: true,
-    });
+    const doc = await CreatorOfferMapping.findOneAndUpdate(
+      { _id: req.params.id, tenantId: req.tenantId },
+      patch,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
     if (!doc) return res.status(404).json({ error: 'Not found' });
     res.json(doc);
   } catch (err) {
@@ -87,7 +101,13 @@ exports.update = async (req, res) => {
 
 exports.remove = async (req, res) => {
   try {
-    const doc = await CreatorOfferMapping.findByIdAndDelete(req.params.id);
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    const doc = await CreatorOfferMapping.findOneAndDelete({
+      _id: req.params.id,
+      tenantId: req.tenantId,
+    });
     if (!doc) return res.status(404).json({ error: 'Not found' });
     res.json({ message: 'Deleted' });
   } catch (err) {

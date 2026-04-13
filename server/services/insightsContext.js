@@ -5,13 +5,14 @@ const { computePortfolioRunComparison } = require('../controllers/metricControll
 /**
  * Compact, factual snapshot for Gemini — no PII beyond creator names already in DB.
  */
-async function buildInsightsContext() {
-  const videos = await Video.find({ status: 'active' }).lean();
+async function buildInsightsContext(tenantId) {
+  const videos = await Video.find({ status: 'active', tenantId }).lean();
   const videoById = {};
   for (const v of videos) videoById[v._id.toString()] = v;
 
+  const videoIds = videos.map((x) => x._id);
   const latest = await VideoMetric.aggregate([
-    { $match: { videoId: { $in: videos.map((x) => x._id) } } },
+    { $match: { tenantId, videoId: { $in: videoIds } } },
     { $sort: { scrapedAt: -1 } },
     {
       $group: {
@@ -72,7 +73,7 @@ async function buildInsightsContext() {
     .sort((a, b) => b.totalViews - a.totalViews)
     .slice(0, 8);
 
-  const portfolio = await computePortfolioRunComparison();
+  const portfolio = await computePortfolioRunComparison(tenantId);
 
   let totalCost = 0;
   let videosWithCost = 0;

@@ -5,7 +5,8 @@ const mongoose = require('mongoose');
  */
 const insightCacheSchema = new mongoose.Schema(
   {
-    key: { type: String, required: true, unique: true, default: 'default' },
+    /** Tenant slug (matches Video.tenantId) */
+    key: { type: String, required: true, unique: true },
     contextHash: { type: String, default: '' },
     insights: { type: [mongoose.Schema.Types.Mixed], default: [] },
     model: { type: String, default: '' },

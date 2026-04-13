@@ -3,7 +3,7 @@ const Video = require('../models/Video');
 const { buildVideoCreatePayload } = require('../utils/videoPayload');
 
 /**
- * Map a spreadsheet row (Excel or Google CSV) to the shape expected by buildVideoCreatePayload.
+ * Map a spreadsheet row (Excel / CSV) to the shape expected by buildVideoCreatePayload.
  */
 function rowToVideoRaw(row) {
   const url =
@@ -62,8 +62,9 @@ function rowToVideoRaw(row) {
 /**
  * POST /api/upload/excel
  * Parse uploaded Excel file and bulk-insert videos.
- * Columns: URL (required), Creator, Campaign, Platform, InitiatedBy, Created By, Publish Date,
- * Influencer Name, Influencer Handle, LOB, Video Duration, Total Cost, Coupon code used, Sales.
+ * Columns: URL (required), Creator, Campaign, Platform (tiktok|instagram|facebook), InitiatedBy,
+ * Created By, Publish Date, Influencer Name, Influencer Handle, LOB, Video Duration, Total Cost,
+ * Coupon code used, Sales.
  */
 exports.uploadExcel = async (req, res) => {
   try {
@@ -83,7 +84,7 @@ exports.uploadExcel = async (req, res) => {
 
     for (const row of rows) {
       const raw = rowToVideoRaw(row);
-      const payload = buildVideoCreatePayload(raw);
+      const payload = buildVideoCreatePayload(raw, { tenantId: req.tenantId });
       if (!payload) continue;
 
       try {
@@ -103,62 +104,3 @@ exports.uploadExcel = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
-
-/**
- * POST /api/upload/google-sheet
- * Accept a Google Sheets published CSV URL, fetch it, and insert rows.
- */
-exports.importGoogleSheet = async (req, res) => {
-  try {
-    const { sheetUrl } = req.body;
-    if (!sheetUrl) {
-      return res.status(400).json({ error: 'sheetUrl is required' });
-    }
-
-    const csvUrl = convertToCsvUrl(sheetUrl);
-
-    const axios = require('axios');
-    const { data: csvText } = await axios.get(csvUrl);
-
-    const workbook = XLSX.read(csvText, { type: 'string' });
-    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-
-    const results = { added: 0, duplicates: 0, errors: [] };
-
-    for (const row of rows) {
-      const raw = rowToVideoRaw(row);
-      const payload = buildVideoCreatePayload(raw);
-      if (!payload) continue;
-
-      try {
-        await Video.create(payload);
-        results.added++;
-      } catch (err) {
-        if (err.code === 11000) {
-          results.duplicates++;
-        } else {
-          results.errors.push(`Row "${raw.url}": ${err.message}`);
-        }
-      }
-    }
-
-    res.status(201).json(results);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-/**
- * Turn a Google Sheets URL into its CSV export endpoint.
- * Supports /edit, /view, and /pub links.
- */
-function convertToCsvUrl(url) {
-  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
-  if (!match) throw new Error('Invalid Google Sheets URL');
-  const id = match[1];
-
-  const gidMatch = url.match(/gid=(\d+)/);
-  const gid = gidMatch ? gidMatch[1] : '0';
-
-  return `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
-}

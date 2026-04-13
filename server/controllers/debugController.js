@@ -7,15 +7,25 @@ const {
 
 /**
  * GET /api — list of all HTTP routes (for Postman / frontend dev).
+ * In production, hidden unless EXPOSE_API_CATALOG=true (reduces attack surface mapping).
  */
 exports.getApiCatalog = (req, res) => {
+  if (process.env.NODE_ENV === 'production' && process.env.EXPOSE_API_CATALOG !== 'true') {
+    return res.status(404).json({ error: 'Not found' });
+  }
   res.json({
     name: 'Influencer Tracker API',
     docs: 'GET /api — this list. GET /api/debug/creators — DB creator field status.',
     endpoints: [
       { group: 'Core' },
-      { method: 'GET', path: '/api', description: 'API catalog (this list)' },
-      { method: 'GET', path: '/api/health', description: 'Health check' },
+      { method: 'GET', path: '/api', description: 'API catalog (this list); hidden in production unless EXPOSE_API_CATALOG=true' },
+      { method: 'GET', path: '/api/health', description: 'Health check (503 if DB disconnected)' },
+      { method: 'GET', path: '/api/tenants', description: 'Tenant registry (public)' },
+      { method: 'POST', path: '/api/access-requests', description: 'Submit access request (public)' },
+
+      { group: 'Auth' },
+      { method: 'POST', path: '/api/auth/login', body: '{ email, password }', description: 'JWT' },
+      { method: 'GET', path: '/api/auth/me', description: 'Current user (Bearer)' },
 
       { group: 'Videos' },
       { method: 'GET', path: '/api/videos', query: 'campaign, platform, status', description: 'List tracked videos' },
@@ -47,7 +57,6 @@ exports.getApiCatalog = (req, res) => {
 
       { group: 'Upload' },
       { method: 'POST', path: '/api/upload/excel', body: 'multipart file', description: 'Import .xlsx' },
-      { method: 'POST', path: '/api/upload/google-sheet', body: '{ sheetUrl }', description: 'Import public sheet CSV' },
 
       { group: 'Creator offers' },
       { method: 'GET', path: '/api/creator-offers/creators', description: 'Distinct creator names for mapping UI' },
@@ -63,6 +72,14 @@ exports.getApiCatalog = (req, res) => {
       { method: 'POST', path: '/api/campaigns', description: 'Create campaign' },
       { method: 'PUT', path: '/api/campaigns/:id', description: 'Update campaign' },
       { method: 'DELETE', path: '/api/campaigns/:id', description: 'Delete campaign' },
+
+      { group: 'Admin (super_admin)' },
+      { method: 'GET', path: '/api/admin/applications', description: 'List access applications' },
+      { method: 'PATCH', path: '/api/admin/applications/:id/approve', description: 'Approve request → creates user' },
+      { method: 'PATCH', path: '/api/admin/applications/:id/reject', body: '{ adminNote? }', description: 'Reject request' },
+      { method: 'GET', path: '/api/admin/users', description: 'List users' },
+      { method: 'POST', path: '/api/admin/users', description: 'Create tenant user' },
+      { method: 'PATCH', path: '/api/admin/users/:id', description: 'Update user' },
 
       { group: 'Debug' },
       { method: 'GET', path: '/api/debug/creators', description: 'Videos + whether creator is set (DB check)' },

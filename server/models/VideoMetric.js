@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
 const videoMetricSchema = new mongoose.Schema({
+  tenantId: {
+    type: String,
+    required: true,
+    default: 'default',
+    index: true,
+  },
   videoId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Video',
