@@ -3,6 +3,7 @@ const Video = require('../models/Video');
 const CreatorOfferMapping = require('../models/CreatorOfferMapping');
 const { runScrapeJob } = require('../cron/scraper');
 const { isValidObjectId } = require('../utils/mongoId');
+const { effectiveVideoPlatform, videoMatchFragmentForPlatform } = require('../utils/videoPlatform');
 
 /**
  * Per calendar day: take the latest scrape per video that day, then sum across videos.
@@ -306,8 +307,9 @@ exports.getPlatformAnalytics = async (req, res) => {
     for (const m of latest) {
       const v = videoById[m._id?.toString()];
       if (!v) continue;
-      const p = v.platform === 'instagram' ? 'instagram' : v.platform === 'tiktok' ? 'tiktok' : 'unknown';
-      const b = buckets[p];
+      const raw = effectiveVideoPlatform(v);
+      const p = raw === 'facebook' ? 'unknown' : raw;
+      const b = buckets[p] || buckets.unknown;
       b.videoCount += 1;
       b.totalViews += m.views || 0;
       b.totalLikes += m.likes || 0;
@@ -432,12 +434,27 @@ exports.getDailyBreakdown = async (req, res) => {
   }
 };
 
+function parseDashboardPlatform(raw) {
+  if (raw == null || raw === '') return undefined;
+  const p = String(raw).trim().toLowerCase();
+  if (p === 'tiktok' || p === 'instagram' || p === 'facebook') return p;
+  return undefined;
+}
+
+function activeVideoMatch(tenantId, platform) {
+  const q = { status: 'active', tenantId };
+  if (platform) Object.assign(q, videoMatchFragmentForPlatform(platform));
+  return q;
+}
+
 /**
  * Portfolio totals: sum of each active video's latest scrape vs second-latest (new run − last run).
  * Only videos with ≥2 metric rows are included so both sums are comparable.
+ * @param {string} tenantId
+ * @param {'tiktok'|'instagram'|'facebook'|undefined} [platform] — restrict to this platform
  */
-async function computePortfolioRunComparison(tenantId) {
-  const activeVideos = await Video.find({ status: 'active', tenantId }).select('_id').lean();
+async function computePortfolioRunComparison(tenantId, platform) {
+  const activeVideos = await Video.find(activeVideoMatch(tenantId, platform)).select('_id').lean();
   const ids = activeVideos.map((v) => v._id);
   if (ids.length === 0) {
     return {
@@ -560,7 +577,9 @@ exports.getPortfolioRunComparison = async (req, res) => {
  */
 exports.getDashboardKpis = async (req, res) => {
   try {
-    const portfolio = await computePortfolioRunComparison(req.tenantId);
+    const platform = parseDashboardPlatform(req.query.platform);
+    const portfolio = await computePortfolioRunComparison(req.tenantId, platform);
+    const vMatch = activeVideoMatch(req.tenantId, platform);
     const now = new Date();
     const last7 = new Date(now);
     last7.setDate(last7.getDate() - 7);
@@ -569,17 +588,15 @@ exports.getDashboardKpis = async (req, res) => {
 
     const [videosNewLast7d, videosNewPrior7d, costRow] = await Promise.all([
       Video.countDocuments({
-        status: 'active',
-        tenantId: req.tenantId,
+        ...vMatch,
         addedDate: { $gte: last7 },
       }),
       Video.countDocuments({
-        status: 'active',
-        tenantId: req.tenantId,
+        ...vMatch,
         addedDate: { $gte: prev7Start, $lt: last7 },
       }),
       Video.aggregate([
-        { $match: { status: 'active', tenantId: req.tenantId } },
+        { $match: vMatch },
         {
           $group: {
             _id: null,
@@ -623,6 +640,7 @@ exports.getDashboardKpis = async (req, res) => {
       totalCost,
       transactionsTotal,
       transactionsVideos,
+      platformFilter: platform || null,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

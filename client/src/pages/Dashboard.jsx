@@ -1,38 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { useTenantPath } from '../hooks/useTenantPath';
+import DashboardTabNav, { DASHBOARD_TABS, DASHBOARD_TAB_SUBTITLES } from '../components/DashboardTabNav';
 import VideoTable from '../components/VideoTable';
 import CampaignOverview from '../components/CampaignOverview';
 import OverviewTrendChart from '../components/OverviewTrendChart';
 import DailyViewsChart from '../components/DailyViewsChart';
 import TopCreatorsChart from '../components/TopCreatorsChart';
-import InfluencerInsightsTab from '../components/InfluencerInsightsTab';
 import DataMetricsTab from '../components/DataMetricsTab';
 import DashboardTopCreatorsInsight from '../components/DashboardTopCreatorsInsight';
-import VideoTrackingTab from '../components/VideoTrackingTab';
 import AiInsightsTab from '../components/AiInsightsTab';
 import { fetchDashboardKpis, triggerScrape } from '../services/api';
 
-const TABS = [
-  { id: 'summary', label: 'Summary', icon: '📊' },
-  { id: 'video-tracking', label: 'Video Tracking', icon: '📹' },
-  { id: 'metrics', label: 'Data Metrics', icon: '📈' },
-  { id: 'working', label: "What's Working", icon: '🚀' },
-  { id: 'why', label: 'Why It Works', icon: '🧠' },
-  { id: 'creators', label: 'Creators', icon: '👤' },
-  { id: 'actions', label: 'Actions', icon: '⚡' },
-  { id: 'performance', label: 'Performance', icon: '🎬' },
-];
-
-const TAB_SUBTITLES = {
-  summary: 'Portfolio KPIs, trends, and charts in one place.',
-  'video-tracking': 'Track views, engagement, and performance across all monitored posts.',
-  metrics: 'Daily breakdown and latest vs previous scrape comparison.',
-  working: 'Daily views and top creators across your roster.',
-  why: 'Gemini AI insights from your live portfolio metrics.',
-  creators: 'Per-creator performance and drill-downs.',
-  actions: 'Recommended next steps (coming soon).',
-  performance: 'Scrape fresh metrics and review per-video performance.',
-};
+function tabFromSearchParams(searchParams) {
+  const t = searchParams.get('tab');
+  if (t && DASHBOARD_TABS.some((x) => x.id === t)) return t;
+  return 'summary';
+}
 
 function fmtInt(n) {
   if (n == null || Number.isNaN(Number(n))) return '—';
@@ -199,33 +184,57 @@ function DashboardKpiSection({ kpis, loadingKpis, port, pct }) {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { withTenant } = useTenantPath();
   const [kpis, setKpis] = useState(null);
   const [loadingKpis, setLoadingKpis] = useState(true);
   const [scraping, setScraping] = useState(false);
-  const [activeTab, setActiveTab] = useState('summary');
+  const [kpiPlatform, setKpiPlatform] = useState('all');
 
-  const loadKpis = () => {
+  const activeTab = useMemo(() => tabFromSearchParams(searchParams), [searchParams]);
+
+  const setActiveTab = useCallback(
+    (id) => {
+      if (id === 'summary') {
+        setSearchParams({}, { replace: true });
+      } else {
+        setSearchParams({ tab: id }, { replace: true });
+      }
+    },
+    [setSearchParams]
+  );
+
+  const loadKpis = useCallback(() => {
     setLoadingKpis(true);
-    fetchDashboardKpis()
+    fetchDashboardKpis({ platform: kpiPlatform })
       .then((res) => setKpis(res.data))
       .catch(() => {
         toast.error('Could not load dashboard metrics');
       })
       .finally(() => setLoadingKpis(false));
-  };
+  }, [kpiPlatform]);
 
   useEffect(() => {
     loadKpis();
     const onVideosUpdated = () => loadKpis();
     window.addEventListener('videos-updated', onVideosUpdated);
     return () => window.removeEventListener('videos-updated', onVideosUpdated);
-  }, []);
+  }, [loadKpis]);
 
   const handleScrapeNow = async () => {
     setScraping(true);
     try {
       const res = await triggerScrape();
-      toast.success(`Scraped ${res.data.scraped} videos`);
+      const { scraped, warnings = [], counts } = res.data;
+      if (warnings.length > 0) {
+        toast(warnings.join('\n'), { icon: '⚠️', duration: 10000 });
+      }
+      const q =
+        counts != null
+          ? ` (${counts.tiktok ?? 0} TikTok, ${counts.instagram ?? 0} Instagram in queue)`
+          : '';
+      toast.success(`Scraped ${scraped} metric row(s)${q}`);
       setTimeout(() => {
         loadKpis();
         window.dispatchEvent(new CustomEvent('videos-updated', { detail: {} }));
@@ -239,7 +248,7 @@ export default function Dashboard() {
 
   const port = kpis?.portfolio;
   const pct = port?.pctChange;
-  const subtitle = TAB_SUBTITLES[activeTab] || TAB_SUBTITLES.summary;
+  const subtitle = DASHBOARD_TAB_SUBTITLES[activeTab] || DASHBOARD_TAB_SUBTITLES.summary;
 
   return (
     <>
@@ -251,28 +260,25 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="dashboard-tabs dashboard-tabs--top-bar dashboard-tabs--before-page">
-          <div className="dashboard-tabs-bar" role="tablist">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                className={`dashboard-tab ${activeTab === tab.id ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <span className="dashboard-tab-icon" aria-hidden>
-                  {tab.icon}
-                </span>
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <DashboardTabNav selectedTabId={activeTab} onTabSelect={setActiveTab} />
 
         {activeTab === 'summary' && (
           <>
+            <div className="dashboard-kpi-platform-bar">
+              <span className="dashboard-kpi-platform-label">Platform</span>
+              <div className="dashboard-kpi-platform-pills" role="group" aria-label="Filter KPIs by platform">
+                {['all', 'tiktok', 'instagram', 'facebook'].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={`btn btn-sm ${kpiPlatform === p ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setKpiPlatform(p)}
+                  >
+                    {p === 'all' ? 'All' : p.charAt(0).toUpperCase() + p.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
             <DashboardKpiSection
               kpis={kpis}
               loadingKpis={loadingKpis}
@@ -280,8 +286,10 @@ export default function Dashboard() {
               pct={pct}
             />
             <DashboardTopCreatorsInsight
-              onViewAllCreators={() => setActiveTab('creators')}
-              onOpenFullInsights={() => setActiveTab('why')}
+              onViewAllCreators={() => navigate(withTenant('/creators'))}
+              onOpenFullInsights={() => {
+                setSearchParams({ tab: 'why' }, { replace: true });
+              }}
             />
             <div className="dashboard-tab-panels-region">
               <div className="dashboard-tab-panels">
@@ -292,12 +300,6 @@ export default function Dashboard() {
               </div>
             </div>
           </>
-        )}
-
-        {activeTab === 'video-tracking' && (
-          <div className="dashboard-tab-panels-region">
-            <VideoTrackingTab />
-          </div>
         )}
 
         {activeTab === 'metrics' && (
@@ -320,14 +322,6 @@ export default function Dashboard() {
         {activeTab === 'why' && (
           <div className="dashboard-tab-panels-region">
             <AiInsightsTab />
-          </div>
-        )}
-
-        {activeTab === 'creators' && (
-          <div className="dashboard-tab-panels-region">
-            <section className="dashboard-tab-panel" aria-label="Creators">
-              <InfluencerInsightsTab />
-            </section>
           </div>
         )}
 

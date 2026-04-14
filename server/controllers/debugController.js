@@ -56,7 +56,12 @@ exports.getApiCatalog = (req, res) => {
       },
 
       { group: 'Upload' },
-      { method: 'POST', path: '/api/upload/excel', body: 'multipart file', description: 'Import .xlsx' },
+      {
+        method: 'POST',
+        path: '/api/upload/excel',
+        body: 'multipart file + initiatedBy; headers match Add videos sheet',
+        description: 'Import .xlsx',
+      },
 
       { group: 'Creator offers' },
       { method: 'GET', path: '/api/creator-offers/creators', description: 'Distinct creator names for mapping UI' },

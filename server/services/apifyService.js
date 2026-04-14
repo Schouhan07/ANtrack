@@ -9,16 +9,19 @@ async function runActor(actorId, input) {
   const token = process.env.APIFY_TOKEN;
   if (!token) throw new Error('APIFY_TOKEN must be set in .env');
 
-  const runUrl = `${APIFY_BASE}/acts/${actorId}/runs?token=${token}&waitForFinish=300`;
-  console.log(`[APIFY] Sending request to actor ${actorId}`);
+  const id = String(actorId || '').trim();
+  const q = new URLSearchParams({ token, waitForFinish: '300' });
+  const runUrl = `${APIFY_BASE}/acts/${encodeURIComponent(id)}/runs?${q.toString()}`;
+  console.log(`[APIFY] Sending request to actor ${id}`);
 
   const { data: run } = await axios.post(runUrl, input);
 
   const datasetId = run?.data?.defaultDatasetId;
-  if (!datasetId) throw new Error(`Actor ${actorId} did not return a dataset ID`);
+  if (!datasetId) throw new Error(`Actor ${id} did not return a dataset ID`);
 
+  const itemsQs = new URLSearchParams({ token });
   const { data: dataset } = await axios.get(
-    `${APIFY_BASE}/datasets/${datasetId}/items?token=${token}`
+    `${APIFY_BASE}/datasets/${encodeURIComponent(datasetId)}/items?${itemsQs.toString()}`
   );
 
   const items = Array.isArray(dataset) ? dataset : [];

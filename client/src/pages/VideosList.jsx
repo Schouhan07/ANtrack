@@ -1,13 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
-import { fetchVideos, deleteVideo, updateVideoStatus, updateVideo } from '../services/api';
+import {
+  fetchVideos,
+  deleteVideo,
+  updateVideoStatus,
+  updateVideo,
+  triggerScrape,
+} from '../services/api';
 
 export default function VideosList() {
   const [videos, setVideos] = useState([]);
   const [filter, setFilter] = useState('all');
   const [urlQuery, setUrlQuery] = useState('');
   const [editForm, setEditForm] = useState(null);
+  const [scrapeLoading, setScrapeLoading] = useState(false);
 
   const notifyVideosUpdated = (payload) => {
     window.dispatchEvent(new CustomEvent('videos-updated', { detail: payload || {} }));
@@ -21,7 +28,34 @@ export default function VideosList() {
       .catch(console.error);
   };
 
-  useEffect(() => { load(); }, [filter]);
+  useEffect(() => {
+    load();
+    const onVideosUpdated = () => load();
+    window.addEventListener('videos-updated', onVideosUpdated);
+    return () => window.removeEventListener('videos-updated', onVideosUpdated);
+  }, [filter]);
+
+  const handleScrapeNow = async () => {
+    setScrapeLoading(true);
+    try {
+      const res = await triggerScrape();
+      const { scraped, warnings = [], counts } = res.data;
+      if (warnings.length > 0) {
+        toast(warnings.join('\n'), { icon: '⚠️', duration: 10000 });
+      }
+      const q =
+        counts != null
+          ? ` (${counts.tiktok ?? 0} TikTok, ${counts.instagram ?? 0} Instagram in queue)`
+          : '';
+      toast.success(`Scraped ${scraped} metric row(s)${q}`);
+      notifyVideosUpdated({});
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Scrape failed');
+    } finally {
+      setScrapeLoading(false);
+    }
+  };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Remove this video from tracking?')) return;
@@ -61,10 +95,8 @@ export default function VideosList() {
       platform: v.platform || 'unknown',
       initiatedBy: v.initiatedBy === 'supply' ? 'supply' : 'brand',
       campaign: v.campaign || '',
-      createdBy: v.createdBy || '',
       publishDate: publishStr,
       influencerName: v.influencerName || '',
-      influencerHandle: v.influencerHandle || '',
       lob: v.lob || '',
       videoDuration: v.videoDuration || '',
       totalCost:
@@ -85,10 +117,8 @@ export default function VideosList() {
         platform: editForm.platform,
         initiatedBy: editForm.initiatedBy,
         campaign: editForm.campaign.trim(),
-        createdBy: editForm.createdBy.trim(),
         publishDate: editForm.publishDate || null,
         influencerName: editForm.influencerName.trim(),
-        influencerHandle: editForm.influencerHandle.trim(),
         lob: editForm.lob.trim(),
         videoDuration: editForm.videoDuration.trim(),
         totalCost: editForm.totalCost === '' || Number.isNaN(tc) ? null : tc,
@@ -158,16 +188,6 @@ export default function VideosList() {
                 </select>
               </div>
               <div className="form-group">
-                <label htmlFor="edit-createdBy">Created By</label>
-                <input
-                  id="edit-createdBy"
-                  type="text"
-                  value={editForm.createdBy}
-                  onChange={(e) => setEditForm({ ...editForm, createdBy: e.target.value })}
-                  autoComplete="off"
-                />
-              </div>
-              <div className="form-group">
                 <label htmlFor="edit-publishDate">Publish Date</label>
                 <input
                   id="edit-publishDate"
@@ -183,16 +203,6 @@ export default function VideosList() {
                   type="text"
                   value={editForm.influencerName}
                   onChange={(e) => setEditForm({ ...editForm, influencerName: e.target.value })}
-                  autoComplete="off"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="edit-influencerHandle">Influencer Handle</label>
-                <input
-                  id="edit-influencerHandle"
-                  type="text"
-                  value={editForm.influencerHandle}
-                  onChange={(e) => setEditForm({ ...editForm, influencerHandle: e.target.value })}
                   autoComplete="off"
                 />
               </div>
@@ -367,6 +377,14 @@ export default function VideosList() {
           onChange={(e) => setUrlQuery(e.target.value)}
           aria-label="Search tracked videos by URL"
         />
+        <button
+          type="button"
+          className="btn btn-sm btn-primary videos-list-scrape-btn"
+          disabled={scrapeLoading || videos.length === 0}
+          onClick={handleScrapeNow}
+        >
+          {scrapeLoading ? 'Scraping…' : 'Scrape metrics now'}
+        </button>
       </div>
 
       <div className="card">
@@ -384,8 +402,6 @@ export default function VideosList() {
                   <th>URL</th>
                   <th>Platform</th>
                   <th>Influencer</th>
-                  <th>Handle</th>
-                  <th>Created By</th>
                   <th>Publish</th>
                   <th>LOB</th>
                   <th>Duration</th>
@@ -413,8 +429,6 @@ export default function VideosList() {
                       </span>
                     </td>
                     <td>{v.influencerName || '—'}</td>
-                    <td>{v.influencerHandle || '—'}</td>
-                    <td>{v.createdBy || '—'}</td>
                     <td>
                       {v.publishDate
                         ? new Date(v.publishDate).toLocaleDateString()

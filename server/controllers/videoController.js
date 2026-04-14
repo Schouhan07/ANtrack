@@ -2,6 +2,7 @@ const Video = require('../models/Video');
 const VideoMetric = require('../models/VideoMetric');
 const { buildVideoCreatePayload } = require('../utils/videoPayload');
 const { videoFilter } = require('../utils/tenantScope');
+const { videoMatchFragmentForPlatform } = require('../utils/videoPlatform');
 const { isValidObjectId } = require('../utils/mongoId');
 
 const BULK_MAX_URLS = Math.min(
@@ -29,7 +30,7 @@ exports.getVideos = async (req, res) => {
     const { campaign, platform, status } = req.query;
     const filter = videoFilter(req, {});
     if (campaign) filter.campaign = campaign;
-    if (platform) filter.platform = platform;
+    if (platform) Object.assign(filter, videoMatchFragmentForPlatform(platform));
     if (status) filter.status = status;
 
     const videos = await Video.find(filter).sort({ addedDate: -1 });

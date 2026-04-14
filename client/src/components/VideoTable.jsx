@@ -114,8 +114,6 @@ export default function VideoTable() {
               <tr>
                 <th>Video URL</th>
                 <th>Influencer</th>
-                <th>Handle</th>
-                <th>Created By</th>
                 <th>LOB</th>
                 <th>Coupon</th>
                 <th>Initiated by</th>
@@ -150,8 +148,6 @@ export default function VideoTable() {
                     </a>
                   </td>
                   <td>{r.video?.influencerName || r.video?.creator || '—'}</td>
-                  <td>{r.video?.influencerHandle || '—'}</td>
-                  <td>{r.video?.createdBy || '—'}</td>
                   <td>{r.video?.lob || '—'}</td>
                   <td>{r.video?.offerCode || '—'}</td>
                   <td>

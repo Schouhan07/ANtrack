@@ -7,13 +7,36 @@ import VideoDetail from './VideoDetail';
 import VideosList from './VideosList';
 import CampaignManager from './CampaignManager';
 import CreatorOfferMappings from './CreatorOfferMappings';
+import VideoTrackingPage from './VideoTrackingPage';
+import CreatorsPage from './CreatorsPage';
 import Analytics from './Analytics';
+import SentimentAnalysisPage from './SentimentAnalysisPage';
 import { fetchTenantsMeta } from '../services/api';
+
+const SIDEBAR_LS_KEY = 'antrack_sidebar_expanded';
 
 export default function TenantShell() {
   const { tenant } = useParams();
   const navigate = useNavigate();
   const [valid, setValid] = useState(null);
+  const [sidebarExpanded, setSidebarExpanded] = useState(() => {
+    try {
+      const v = localStorage.getItem(SIDEBAR_LS_KEY);
+      if (v === null) return false;
+      return v === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const setSidebarOpen = (open) => {
+    setSidebarExpanded(open);
+    try {
+      localStorage.setItem(SIDEBAR_LS_KEY, String(open));
+    } catch {
+      /* ignore */
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +71,8 @@ export default function TenantShell() {
 
   if (valid === null) {
     return (
-      <div className="app-layout">
+      <div className={`app-layout ${sidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
+        <Navbar expanded={sidebarExpanded} onToggleExpanded={() => setSidebarOpen(!sidebarExpanded)} />
         <main className="main-content">
           <p className="muted-caption" style={{ padding: 24 }}>
             Loading workspace…
@@ -63,17 +87,20 @@ export default function TenantShell() {
   }
 
   return (
-    <div className="app-layout">
-      <Navbar />
+    <div className={`app-layout ${sidebarExpanded ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
+      <Navbar expanded={sidebarExpanded} onToggleExpanded={() => setSidebarOpen(!sidebarExpanded)} />
       <main className="main-content">
         <Routes>
           <Route index element={<Dashboard />} />
           <Route path="overview" element={<Navigate to="" replace />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="video-tracking" element={<VideoTrackingPage />} />
+          <Route path="creators" element={<CreatorsPage />} />
           <Route path="campaigns" element={<CampaignManager />} />
           <Route path="videos" element={<VideosList />} />
           <Route path="upload" element={<BulkUpload />} />
           <Route path="creator-offers" element={<CreatorOfferMappings />} />
+          <Route path="sentiment-analysis" element={<SentimentAnalysisPage />} />
           <Route path="video/:id" element={<VideoDetail />} />
           <Route path="*" element={<Navigate to="" replace />} />
         </Routes>
