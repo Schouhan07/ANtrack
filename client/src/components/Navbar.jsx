@@ -13,6 +13,7 @@ import {
   FiFilm,
   FiUsers,
   FiSmile,
+  FiLayers,
   FiChevronLeft,
   FiChevronRight,
 } from 'react-icons/fi';
@@ -89,6 +90,11 @@ export default function Navbar({ expanded = true, onToggleExpanded = () => {} })
             <NavLink to={withTenant('/analytics')} className={({ isActive }) => (isActive ? 'active' : '')}>
               <FiPieChart size={18} />
               Analytics
+            </NavLink>
+
+            <NavLink to={withTenant('/personas')} className={({ isActive }) => (isActive ? 'active' : '')}>
+              <FiLayers size={18} />
+              Personas
             </NavLink>
 
             <NavLink

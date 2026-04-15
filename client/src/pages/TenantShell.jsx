@@ -10,6 +10,7 @@ import CreatorOfferMappings from './CreatorOfferMappings';
 import VideoTrackingPage from './VideoTrackingPage';
 import CreatorsPage from './CreatorsPage';
 import Analytics from './Analytics';
+import PersonasPage from './PersonasPage';
 import SentimentAnalysisPage from './SentimentAnalysisPage';
 import { fetchTenantsMeta } from '../services/api';
 
@@ -94,6 +95,7 @@ export default function TenantShell() {
           <Route index element={<Dashboard />} />
           <Route path="overview" element={<Navigate to="" replace />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="personas" element={<PersonasPage />} />
           <Route path="video-tracking" element={<VideoTrackingPage />} />
           <Route path="creators" element={<CreatorsPage />} />
           <Route path="campaigns" element={<CampaignManager />} />

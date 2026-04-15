@@ -4141,6 +4141,295 @@ table tr:hover {
   margin-bottom: 16px;
 }
 
+/* ── Personas page (compact role cards) ───── */
+.page-personas .page-header {
+  margin-bottom: 20px;
+}
+
+.personas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.persona-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 12px 14px 10px;
+  border-left: 3px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.persona-card--revenue {
+  border-left-color: var(--indigo);
+  background: linear-gradient(180deg, var(--indigo-soft) 0%, var(--surface) 42%);
+}
+
+.persona-card--leadership {
+  border-left-color: var(--violet);
+  background: linear-gradient(180deg, var(--violet-soft) 0%, var(--surface) 42%);
+}
+
+.persona-card--execution {
+  border-left-color: var(--emerald);
+  background: linear-gradient(180deg, var(--emerald-soft) 0%, var(--surface) 42%);
+}
+
+.persona-card-head {
+  margin-bottom: 8px;
+}
+
+.persona-card-head--hero {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.persona-avatar-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.persona-avatar-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #fff;
+  box-shadow: var(--shadow-md);
+  flex-shrink: 0;
+}
+
+.persona-avatar-fallback {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.persona-avatar-fallback--revenue {
+  background: linear-gradient(145deg, var(--indigo) 0%, #4338ca 100%);
+}
+
+.persona-avatar-fallback--leadership {
+  background: linear-gradient(145deg, var(--violet) 0%, #6d28d9 100%);
+}
+
+.persona-avatar-fallback--execution {
+  background: linear-gradient(145deg, var(--emerald) 0%, #0d9488 100%);
+}
+
+.persona-card-body {
+  text-align: left;
+}
+
+.persona-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.persona-badges--center {
+  justify-content: center;
+}
+
+.persona-badge {
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+
+.persona-badge--segment {
+  background: rgba(99, 102, 241, 0.2);
+  color: #4338ca;
+}
+
+.persona-card--revenue .persona-badge--segment {
+  background: #005eb8;
+  color: #fff;
+  border: none;
+}
+
+.persona-card--revenue .persona-badge--mode {
+  background: #e8eeff;
+  color: #1b3355;
+  border: 1px solid rgba(0, 94, 184, 0.12);
+}
+
+.persona-card--revenue .persona-role {
+  color: #005eb8;
+}
+
+.persona-card--leadership .persona-badge--segment {
+  background: #6d28d9;
+  color: #fff;
+  border: none;
+}
+
+.persona-card--leadership .persona-badge--mode {
+  background: var(--violet-soft);
+  color: #5b21b6;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.persona-card--leadership .persona-role {
+  color: #6d28d9;
+}
+
+.persona-card--execution .persona-badge--segment {
+  background: #047857;
+  color: #fff;
+  border: none;
+}
+
+.persona-card--execution .persona-badge--mode {
+  background: var(--emerald-soft);
+  color: #065f46;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+}
+
+.persona-card--execution .persona-role {
+  color: #0d9488;
+}
+
+.persona-badge--mode {
+  background: var(--surface-soft);
+  color: var(--ink-muted);
+  border: 1px solid var(--border);
+  font-weight: 700;
+}
+
+.persona-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.persona-role {
+  margin: 2px 0 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+  line-height: 1.25;
+}
+
+.persona-block {
+  margin-bottom: 8px;
+}
+
+.persona-block:last-child {
+  margin-bottom: 0;
+}
+
+.persona-block--dashboard {
+  padding-top: 6px;
+  margin-top: 2px;
+  border-top: 1px dashed var(--border);
+}
+
+.persona-block-title {
+  font-size: 0.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  margin: 0 0 3px;
+}
+
+.persona-block-title--tight {
+  margin-top: 6px;
+}
+
+.persona-goal,
+.persona-decisions {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.persona-list {
+  margin: 0;
+  padding-left: 14px;
+  font-size: 0.74rem;
+  line-height: 1.32;
+  color: var(--ink);
+}
+
+.persona-list li {
+  margin-bottom: 1px;
+}
+
+.persona-list--inline {
+  padding-left: 14px;
+  margin-top: 2px;
+}
+
+.persona-dashboard-hint {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+  line-height: 1.3;
+}
+
+.persona-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.persona-chip {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 6px;
+  line-height: 1.2;
+  color: var(--ink);
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+}
+
+.persona-card--revenue .persona-chip {
+  background: var(--indigo-soft);
+  border-color: rgba(99, 102, 241, 0.25);
+  color: #3730a3;
+}
+
+.persona-card--leadership .persona-chip {
+  background: var(--violet-soft);
+  border-color: rgba(139, 92, 246, 0.22);
+  color: #5b21b6;
+}
+
+.persona-card--execution .persona-chip {
+  background: var(--cyan-soft);
+  border-color: rgba(6, 182, 212, 0.22);
+  color: #0e7490;
+}
+
 .analytics-skeleton-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
