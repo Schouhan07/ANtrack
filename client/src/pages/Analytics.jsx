@@ -81,10 +81,10 @@ export default function Analytics() {
       <div className="page-header page-header--hero">
         <div className="page-header-titles">
           <h1>Platform analytics</h1>
-          <p className="page-subtitle">
+          {/* <p className="page-subtitle">
             Performance split by network — URL decides Instagram vs TikTok (same as dashboard filters).
             Totals use the latest scrape per video; tracked video counts include posts not scraped yet.
-          </p>
+          </p> */}
         </div>
       </div>
 

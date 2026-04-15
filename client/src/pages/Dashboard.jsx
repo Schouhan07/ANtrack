@@ -51,34 +51,18 @@ function GrowthBlock({ pct }) {
   );
 }
 
-function NewVideosGrowthBlock({ last7, prior7 }) {
-  const l = Number(last7) || 0;
-  const p = Number(prior7) || 0;
-  let pct = null;
-  if (p > 0) {
-    pct = ((l - p) / p) * 100;
-  } else if (l > 0 && p === 0) {
-    pct = 100;
-  }
-
-  if (pct == null || Number.isNaN(pct)) {
-    return (
-      <div className="stat-sub stat-sub--growth">
-        <span className="stat-sub-dim">Growth</span>
-        <span className="stat-growth-na">—</span>
-      </div>
-    );
-  }
-  const up = pct >= 0;
-  const rounded = Math.abs(Number(pct.toFixed(1)));
-  return (
-    <div className="stat-sub stat-sub--growth">
-      <span className="stat-sub-dim">Growth</span>
-      <span className={up ? 'stat-growth-up' : 'stat-growth-down'}>
-        {up ? '↑' : '↓'} {rounded}%
-      </span>
-    </div>
-  );
+/** One % for Total videos card: mean of views / likes / comments scrape-to-scrape growth (same basis as those rows). */
+function blendViewsLikesCommentsGrowthPct(pctObj) {
+  if (!pctObj) return null;
+  const parts = ['views', 'likes', 'comments'].map((k) => {
+    const raw = pctObj[k];
+    if (raw == null || raw === '') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }).filter((n) => n != null);
+  if (parts.length === 0) return null;
+  const avg = parts.reduce((a, b) => a + b, 0) / parts.length;
+  return Number(avg.toFixed(1));
 }
 
 function DashboardKpiSection({ kpis, loadingKpis, port, pct }) {
@@ -97,10 +81,7 @@ function DashboardKpiSection({ kpis, loadingKpis, port, pct }) {
             <div className="label">Total videos</div>
             <div className="value">{fmtInt(kpis?.totalVideosActive)}</div>
             <div className="stat-sub" />
-            <NewVideosGrowthBlock
-              last7={kpis?.videosNewLast7d}
-              prior7={kpis?.videosNewPrior7d}
-            />
+            <GrowthBlock pct={blendViewsLikesCommentsGrowthPct(pct)} />
           </div>
 
           <div className="stat-card stat-card--compact stat-card--views">

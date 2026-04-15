@@ -2,16 +2,16 @@ const Video = require('../models/Video');
 const VideoMetric = require('../models/VideoMetric');
 const { computePortfolioRunComparison } = require('../controllers/metricController');
 const { engagementRatePct } = require('../utils/engagementRate');
+const { effectiveVideoPlatform } = require('../utils/videoPlatform');
 
 /**
  * Compact, factual snapshot for Gemini — no PII beyond creator names already in DB.
+ * Platform split matches GET /metrics/platform-analytics (URL-first via effectiveVideoPlatform).
  */
 async function buildInsightsContext(tenantId) {
   const videos = await Video.find({ status: 'active', tenantId }).lean();
-  const videoById = {};
-  for (const v of videos) videoById[v._id.toString()] = v;
-
   const videoIds = videos.map((x) => x._id);
+
   const latest = await VideoMetric.aggregate([
     { $match: { tenantId, videoId: { $in: videoIds } } },
     { $sort: { scrapedAt: -1 } },
@@ -27,6 +27,8 @@ async function buildInsightsContext(tenantId) {
     },
   ]);
 
+  const latestByVideoId = new Map(latest.map((row) => [String(row._id), row]));
+
   const buckets = {
     instagram: { videoCount: 0, totalViews: 0, eng: 0 },
     tiktok: { videoCount: 0, totalViews: 0, eng: 0 },
@@ -34,30 +36,36 @@ async function buildInsightsContext(tenantId) {
   };
 
   const creatorStats = {};
-  for (const m of latest) {
-    const v = videoById[m._id?.toString()];
-    if (!v) continue;
-    const p =
-      v.platform === 'instagram'
-        ? 'instagram'
-        : v.platform === 'tiktok'
-          ? 'tiktok'
-          : 'unknown';
-    const b = buckets[p];
+  for (const v of videos) {
+    const raw = effectiveVideoPlatform(v);
+    const p = raw === 'facebook' ? 'unknown' : raw;
+    const b = buckets[p] || buckets.unknown;
     b.videoCount += 1;
+
+    const m = latestByVideoId.get(String(v._id));
+    if (!m) continue;
+
     const views = m.views || 0;
     b.totalViews += views;
-    const eng = (m.likes || 0) + (m.shares || 0) + (m.saves || 0) + (m.comments || 0);
-    b.eng += eng;
+    b.eng +=
+      (m.likes || 0) + (m.shares || 0) + (m.saves || 0) + (m.comments || 0);
 
-    const c = (v.creator || '').trim() || 'Unknown';
+    const c = String(v.influencerName || v.creator || '').trim() || 'Unknown';
     if (!creatorStats[c]) {
-      creatorStats[c] = { views: 0, likes: 0, shares: 0, saves: 0, videos: 0 };
+      creatorStats[c] = {
+        views: 0,
+        likes: 0,
+        shares: 0,
+        saves: 0,
+        comments: 0,
+        videos: 0,
+      };
     }
     creatorStats[c].views += views;
     creatorStats[c].likes += m.likes || 0;
     creatorStats[c].shares += m.shares || 0;
     creatorStats[c].saves += m.saves || 0;
+    creatorStats[c].comments += m.comments || 0;
     creatorStats[c].videos += 1;
   }
 
@@ -67,7 +75,7 @@ async function buildInsightsContext(tenantId) {
       totalViews: s.views,
       videoCount: s.videos,
       engagementRatePct: engagementRatePct(
-        s.likes + s.shares + s.saves,
+        s.likes + s.shares + s.saves + (s.comments || 0),
         s.views
       ),
     }))
@@ -90,6 +98,7 @@ async function buildInsightsContext(tenantId) {
     platform: key,
     videoCount: b.videoCount,
     totalViews: b.totalViews,
+    /** (likes + shares + saves + comments) / views × 100, latest scrape per video */
     avgEngagementRatePct:
       b.totalViews > 0 ? engagementRatePct(b.eng, b.totalViews) : 0,
   });

@@ -493,28 +493,28 @@ function activeVideoMatch(tenantId, platform) {
 }
 
 /**
- * Portfolio totals: sum of each active video's latest scrape vs second-latest (new run − last run).
- * Only videos with ≥2 metric rows are included so both sums are comparable.
+ * Portfolio totals for dashboard, campaign overview, and AI context.
+ * - latest: sum of each scoped video's newest scrape (matches GET /metrics/platform-analytics when filtered).
+ * - pctChange: summed latest vs previous scrape only for videos with ≥2 rows (same scope), so % is comparable.
  * @param {string} tenantId
- * @param {'tiktok'|'instagram'|'facebook'|undefined} [platform] — restrict to this platform
+ * @param {'tiktok'|'instagram'|'facebook'|undefined} [platform]
  */
 async function computePortfolioRunComparison(tenantId, platform) {
   const activeVideos = await Video.find(activeVideoMatch(tenantId, platform)).select('_id url').lean();
   const totalActiveCount = activeVideos.length;
-  const ids = activeVideos
-    .filter((v) => isHistoricalComparisonAllowedForUrl(v.url))
-    .map((v) => v._id);
+  const ids = activeVideos.map((v) => v._id);
+
   if (ids.length === 0) {
     return {
       latest: null,
       previous: null,
       pctChange: null,
       videosCompared: 0,
-      activeVideos: totalActiveCount,
+      activeVideos: 0,
     };
   }
 
-  const rolled = await VideoMetric.aggregate([
+  const perVideo = await VideoMetric.aggregate([
     { $match: { videoId: { $in: ids }, tenantId } },
     { $sort: { scrapedAt: -1 } },
     {
@@ -538,26 +538,60 @@ async function computePortfolioRunComparison(tenantId, platform) {
         previous: { $arrayElemAt: ['$metrics', 1] },
       },
     },
-    { $match: { previous: { $ne: null } } },
-    {
-      $group: {
-        _id: null,
-        sumLatestViews: { $sum: '$latest.views' },
-        sumLatestLikes: { $sum: '$latest.likes' },
-        sumLatestShares: { $sum: '$latest.shares' },
-        sumLatestSaves: { $sum: '$latest.saves' },
-        sumLatestComments: { $sum: '$latest.comments' },
-        sumPrevViews: { $sum: '$previous.views' },
-        sumPrevLikes: { $sum: '$previous.likes' },
-        sumPrevShares: { $sum: '$previous.shares' },
-        sumPrevSaves: { $sum: '$previous.saves' },
-        sumPrevComments: { $sum: '$previous.comments' },
-        maxLatestAt: { $max: '$latest.scrapedAt' },
-        maxPrevAt: { $max: '$previous.scrapedAt' },
-        videosCompared: { $sum: 1 },
-      },
-    },
   ]);
+
+  const byId = new Map(perVideo.map((row) => [String(row._id), row]));
+
+  let allViews = 0;
+  let allLikes = 0;
+  let allShares = 0;
+  let allSaves = 0;
+  let allComments = 0;
+  let maxLatestAt = null;
+
+  let cmpLatestViews = 0;
+  let cmpLatestLikes = 0;
+  let cmpLatestShares = 0;
+  let cmpLatestSaves = 0;
+  let cmpLatestComments = 0;
+  let cmpPrevViews = 0;
+  let cmpPrevLikes = 0;
+  let cmpPrevShares = 0;
+  let cmpPrevSaves = 0;
+  let cmpPrevComments = 0;
+  let maxPrevAt = null;
+  let videosCompared = 0;
+
+  for (const v of activeVideos) {
+    const row = byId.get(String(v._id));
+    if (!row || !row.latest) continue;
+    const L = row.latest;
+    const P = row.previous;
+
+    allViews += nonNeg(L.views);
+    allLikes += nonNeg(L.likes);
+    allShares += nonNeg(L.shares);
+    allSaves += nonNeg(L.saves);
+    allComments += nonNeg(L.comments);
+    const tL = L.scrapedAt ? new Date(L.scrapedAt) : null;
+    if (tL && (!maxLatestAt || tL > maxLatestAt)) maxLatestAt = tL;
+
+    if (P) {
+      videosCompared += 1;
+      cmpLatestViews += nonNeg(L.views);
+      cmpLatestLikes += nonNeg(L.likes);
+      cmpLatestShares += nonNeg(L.shares);
+      cmpLatestSaves += nonNeg(L.saves);
+      cmpLatestComments += nonNeg(L.comments);
+      cmpPrevViews += nonNeg(P.views);
+      cmpPrevLikes += nonNeg(P.likes);
+      cmpPrevShares += nonNeg(P.shares);
+      cmpPrevSaves += nonNeg(P.saves);
+      cmpPrevComments += nonNeg(P.comments);
+      const tP = P.scrapedAt ? new Date(P.scrapedAt) : null;
+      if (tP && (!maxPrevAt || tP > maxPrevAt)) maxPrevAt = tP;
+    }
+  }
 
   const pctFor = (a, b) => {
     const prev = nonNeg(b);
@@ -565,45 +599,41 @@ async function computePortfolioRunComparison(tenantId, platform) {
     return (((nonNeg(a) - prev) / prev) * 100).toFixed(1);
   };
 
-  if (!rolled.length) {
-    return {
-      latest: null,
-      previous: null,
-      pctChange: null,
-      videosCompared: 0,
-      activeVideos: totalActiveCount,
-    };
-  }
-
-  const r = rolled[0];
   const latest = {
-    views: nonNeg(r.sumLatestViews),
-    likes: nonNeg(r.sumLatestLikes),
-    shares: nonNeg(r.sumLatestShares),
-    saves: nonNeg(r.sumLatestSaves),
-    comments: nonNeg(r.sumLatestComments),
-    scrapedAt: r.maxLatestAt,
+    views: nonNeg(allViews),
+    likes: nonNeg(allLikes),
+    shares: nonNeg(allShares),
+    saves: nonNeg(allSaves),
+    comments: nonNeg(allComments),
+    scrapedAt: maxLatestAt,
   };
-  const previous = {
-    views: nonNeg(r.sumPrevViews),
-    likes: nonNeg(r.sumPrevLikes),
-    shares: nonNeg(r.sumPrevShares),
-    saves: nonNeg(r.sumPrevSaves),
-    comments: nonNeg(r.sumPrevComments),
-    scrapedAt: r.maxPrevAt,
-  };
+
+  const previous =
+    videosCompared > 0
+      ? {
+          views: nonNeg(cmpPrevViews),
+          likes: nonNeg(cmpPrevLikes),
+          shares: nonNeg(cmpPrevShares),
+          saves: nonNeg(cmpPrevSaves),
+          comments: nonNeg(cmpPrevComments),
+          scrapedAt: maxPrevAt,
+        }
+      : null;
 
   return {
     latest,
     previous,
-    pctChange: {
-      views: pctFor(latest.views, previous.views),
-      likes: pctFor(latest.likes, previous.likes),
-      shares: pctFor(latest.shares, previous.shares),
-      saves: pctFor(latest.saves, previous.saves),
-      comments: pctFor(latest.comments, previous.comments),
-    },
-    videosCompared: r.videosCompared,
+    pctChange:
+      videosCompared > 0
+        ? {
+            views: pctFor(cmpLatestViews, cmpPrevViews),
+            likes: pctFor(cmpLatestLikes, cmpPrevLikes),
+            shares: pctFor(cmpLatestShares, cmpPrevShares),
+            saves: pctFor(cmpLatestSaves, cmpPrevSaves),
+            comments: pctFor(cmpLatestComments, cmpPrevComments),
+          }
+        : null,
+    videosCompared,
     activeVideos: totalActiveCount,
   };
 }
