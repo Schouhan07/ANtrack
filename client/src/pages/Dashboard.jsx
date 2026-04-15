@@ -144,7 +144,7 @@ function DashboardKpiSection({ kpis, loadingKpis, port, pct }) {
           <div className="stat-card stat-card--compact stat-card--txn">
             <div className="stat-card-accent" aria-hidden />
             <div className="label">Transactions</div>
-            <div className="value">70</div>
+            <div className="value">4137</div>
             {/* <div className="value">{fmtInt(kpis?.transactionsTotal)}</div> */}
             {/* <div className="stat-sub">
               Sum of Sales on tracked videos
