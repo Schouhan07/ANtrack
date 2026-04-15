@@ -79,6 +79,13 @@ export const fetchDashboardKpis = (opts = {}) => {
 };
 export const fetchTopCreators = () => API.get('/metrics/top-creators');
 export const fetchInfluencerInsights = () => API.get('/metrics/influencers');
+/** @param {{ platform?: 'all'|'tiktok'|'instagram'|'facebook' }} [opts] */
+export const fetchCreatorScores = (opts = {}) => {
+  const { platform } = opts;
+  const params = {};
+  if (platform && platform !== 'all') params.platform = platform;
+  return API.get('/metrics/creator-scores', { params });
+};
 export const triggerScrape = () => API.post('/metrics/scrape-now');
 
 // ── AI insights (Gemini) ────────────────────────

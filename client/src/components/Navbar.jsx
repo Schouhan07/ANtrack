@@ -53,11 +53,6 @@ export default function Navbar({ expanded = true, onToggleExpanded = () => {} })
               Dashboard
             </NavLink>
 
-            <NavLink to={withTenant('/analytics')} className={({ isActive }) => (isActive ? 'active' : '')}>
-              <FiPieChart size={18} />
-              Analytics
-            </NavLink>
-
             <NavLink
               to={withTenant('/video-tracking')}
               className={({ isActive }) => (isActive ? 'active' : '')}
@@ -89,6 +84,11 @@ export default function Navbar({ expanded = true, onToggleExpanded = () => {} })
             <NavLink to={withTenant('/creator-offers')} className={({ isActive }) => (isActive ? 'active' : '')}>
               <FiTag size={18} />
               Offer maps
+            </NavLink>
+
+            <NavLink to={withTenant('/analytics')} className={({ isActive }) => (isActive ? 'active' : '')}>
+              <FiPieChart size={18} />
+              Analytics
             </NavLink>
 
             <NavLink

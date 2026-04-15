@@ -25,7 +25,8 @@ function fmtCount(n) {
 function engagementPct(row) {
   const v = Math.max(1, Number(row.views) || 0);
   const eng = (Number(row.likes) || 0) + (Number(row.shares) || 0) + (Number(row.saves) || 0);
-  return ((eng / v) * 100).toFixed(2);
+  const pct = (eng / v) * 100;
+  return Math.max(0, pct).toFixed(2);
 }
 
 function shareRate(row) {
@@ -187,10 +188,6 @@ export default function VideoTrackingTab() {
       if (!inNumericRange(views, filters.viewsMin, filters.viewsMax)) return false;
       const eng = parseFloat(engagementPct(r));
       if (!inNumericRange(eng, filters.engagementMin, filters.engagementMax)) return false;
-      const shares = Number(r.shares) || 0;
-      if (!inNumericRange(shares, filters.sharesMin, filters.sharesMax)) return false;
-      const saves = Number(r.saves) || 0;
-      if (!inNumericRange(saves, filters.savesMin, filters.savesMax)) return false;
       return true;
     });
   }, [rows, filters]);

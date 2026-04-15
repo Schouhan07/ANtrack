@@ -1,6 +1,7 @@
 const Video = require('../models/Video');
 const VideoMetric = require('../models/VideoMetric');
 const { computePortfolioRunComparison } = require('../controllers/metricController');
+const { engagementRatePct } = require('../utils/engagementRate');
 
 /**
  * Compact, factual snapshot for Gemini — no PII beyond creator names already in DB.
@@ -65,10 +66,10 @@ async function buildInsightsContext(tenantId) {
       name,
       totalViews: s.views,
       videoCount: s.videos,
-      engagementRatePct:
-        s.views > 0
-          ? Number((((s.likes + s.shares + s.saves) / s.views) * 100).toFixed(2))
-          : 0,
+      engagementRatePct: engagementRatePct(
+        s.likes + s.shares + s.saves,
+        s.views
+      ),
     }))
     .sort((a, b) => b.totalViews - a.totalViews)
     .slice(0, 8);
@@ -90,7 +91,7 @@ async function buildInsightsContext(tenantId) {
     videoCount: b.videoCount,
     totalViews: b.totalViews,
     avgEngagementRatePct:
-      b.totalViews > 0 ? Number(((b.eng / b.totalViews) * 100).toFixed(2)) : 0,
+      b.totalViews > 0 ? engagementRatePct(b.eng, b.totalViews) : 0,
   });
 
   return {
@@ -107,15 +108,12 @@ async function buildInsightsContext(tenantId) {
             (portfolio.latest.comments || 0),
           portfolioEngagementRatePct:
             portfolio.latest.views > 0
-              ? Number(
-                  (
-                    ((portfolio.latest.likes +
-                      portfolio.latest.shares +
-                      portfolio.latest.saves +
-                      (portfolio.latest.comments || 0)) /
-                      portfolio.latest.views) *
-                    100
-                  ).toFixed(2)
+              ? engagementRatePct(
+                  portfolio.latest.likes +
+                    portfolio.latest.shares +
+                    portfolio.latest.saves +
+                    (portfolio.latest.comments || 0),
+                  portfolio.latest.views
                 )
               : 0,
           viewsGrowthPctVsPrior: portfolio.pctChange?.views ?? null,

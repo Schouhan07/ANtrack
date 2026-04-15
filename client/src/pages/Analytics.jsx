@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { fetchPlatformAnalytics } from '../services/api';
 
 function Stat({ label, value, sub }) {
@@ -62,11 +62,19 @@ export default function Analytics() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null);
     fetchPlatformAnalytics()
       .then((res) => setData(res.data))
       .catch((e) => setError(e.response?.data?.error || e.message));
   }, []);
+
+  useEffect(() => {
+    load();
+    const onVideosUpdated = () => load();
+    window.addEventListener('videos-updated', onVideosUpdated);
+    return () => window.removeEventListener('videos-updated', onVideosUpdated);
+  }, [load]);
 
   return (
     <div className="page-analytics">
@@ -74,8 +82,8 @@ export default function Analytics() {
         <div className="page-header-titles">
           <h1>Platform analytics</h1>
           <p className="page-subtitle">
-            Performance split by network — same latest-scrape totals as elsewhere, grouped for Instagram
-            vs TikTok.
+            Performance split by network — URL decides Instagram vs TikTok (same as dashboard filters).
+            Totals use the latest scrape per video; tracked video counts include posts not scraped yet.
           </p>
         </div>
       </div>
@@ -118,19 +126,6 @@ export default function Analytics() {
             data={data.tiktok}
           />
         </div>
-      )}
-
-      {data && data.unknown && data.unknown.videoCount > 0 && (
-        <section className="analytics-unknown card" aria-label="Other platforms">
-          <h3 className="analytics-unknown-title">Other / unknown platform</h3>
-          <p className="analytics-unknown-lead">
-            {data.unknown.videoCount} video(s) without a clear Instagram or TikTok URL — totals below.
-          </p>
-          <div className="analytics-unknown-stats">
-            <Stat label="Views" value={data.unknown.totalViews.toLocaleString()} />
-            <Stat label="Engagement rate" value={`${data.unknown.avgEngagementRate}%`} />
-          </div>
-        </section>
       )}
     </div>
   );

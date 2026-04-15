@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { FiMoreHorizontal, FiZap, FiArrowRight, FiRefreshCw } from 'react-icons/fi';
-import { fetchTopCreators, fetchAiInsights } from '../services/api';
+import { fetchCreatorScores, fetchAiInsights } from '../services/api';
 
 function fmtViews(n) {
   if (n == null) return '—';
@@ -9,15 +9,6 @@ function fmtViews(n) {
   if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M views`;
   if (v >= 1e3) return `${(v / 1e3).toFixed(1)}k views`;
   return `${v.toLocaleString()} views`;
-}
-
-/** Engagement-style score 0–99 from views/likes. */
-function creatorScore(views, likes) {
-  const v = Number(views) || 0;
-  const l = Number(likes) || 0;
-  if (v <= 0) return 0;
-  const eng = Math.min(99, Math.round((l / v) * 100));
-  return Math.max(1, eng);
 }
 
 function CreatorAvatar({ name }) {
@@ -52,10 +43,15 @@ function buildStrategyBrief(featured, generatedAt) {
 }
 
 /**
+ * @param {'all'|'tiktok'|'instagram'|'facebook'} platform — same filter as dashboard KPIs
  * @param {() => void} onViewAllCreators — switch to Creators tab
  * @param {() => void} [onOpenFullInsights] — switch to Why it works (full Gemini list)
  */
-export default function DashboardTopCreatorsInsight({ onViewAllCreators, onOpenFullInsights }) {
+export default function DashboardTopCreatorsInsight({
+  platform = 'all',
+  onViewAllCreators,
+  onOpenFullInsights,
+}) {
   const [rows, setRows] = useState([]);
   const [creatorsLoading, setCreatorsLoading] = useState(true);
 
@@ -71,11 +67,19 @@ export default function DashboardTopCreatorsInsight({ onViewAllCreators, onOpenF
 
   const loadCreators = useCallback(() => {
     setCreatorsLoading(true);
-    fetchTopCreators()
-      .then((res) => setRows((res.data || []).slice(0, 5)))
+    fetchCreatorScores({ platform })
+      .then((res) => {
+        const list = (res.data?.creators || []).slice(0, 5).map((c) => ({
+          creator: c.name,
+          videos: c.videoCount,
+          views: c.sumViews,
+          contentScore: c.contentScore,
+        }));
+        setRows(list);
+      })
       .catch(() => {})
       .finally(() => setCreatorsLoading(false));
-  }, []);
+  }, [platform]);
 
   const loadInsights = useCallback(async () => {
     setInsightLoading(true);
@@ -159,8 +163,16 @@ export default function DashboardTopCreatorsInsight({ onViewAllCreators, onOpenF
   return (
     <div className="dashboard-insight-row">
       <div className="dashboard-top-creators-card">
-        <div className="dashboard-insight-card-head">
-          <h3 className="dashboard-insight-card-title">Top Creators</h3>
+        <div className="dashboard-insight-card-head dashboard-insight-card-head--top-creators">
+          <div>
+            <h3 className="dashboard-insight-card-title">Top Creators</h3>
+            {platform !== 'all' && (
+              <p className="dashboard-top-creators-filter-hint muted-caption">
+                {platform.charAt(0).toUpperCase() + platform.slice(1)} only · same content score as
+                Creators → Creator score
+              </p>
+            )}
+          </div>
           <button
             type="button"
             className="dashboard-insight-icon-btn"
@@ -192,7 +204,7 @@ export default function DashboardTopCreatorsInsight({ onViewAllCreators, onOpenF
                 </div>
                 <div className="dashboard-creator-score-pill">
                   <span className="dashboard-creator-score-num">
-                    {creatorScore(creator.views, creator.likes)}
+                    {Number(creator.contentScore).toFixed(1)}
                   </span>
                   <span className="dashboard-creator-score-label">Score</span>
                 </div>

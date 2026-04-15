@@ -4,6 +4,14 @@ const CreatorOfferMapping = require('../models/CreatorOfferMapping');
 const { runScrapeJob } = require('../cron/scraper');
 const { isValidObjectId } = require('../utils/mongoId');
 const { effectiveVideoPlatform, videoMatchFragmentForPlatform } = require('../utils/videoPlatform');
+const {
+  isHistoricalComparisonAllowedForUrl,
+} = require('../utils/historicalComparisonAllowlist');
+const {
+  fillDailyPortfolioRows,
+  padWeeklyTrendIfSingle,
+} = require('../utils/metricTimeSeriesFill');
+const { engagementRatePct } = require('../utils/engagementRate');
 
 /**
  * Per calendar day: take the latest scrape per video that day, then sum across videos.
@@ -157,7 +165,13 @@ exports.getLatestMetrics = async (req, res) => {
     enriched.sort((a, b) => new Date(b.scrapedAt) - new Date(a.scrapedAt));
 
     // Drop metric rows whose video was removed (legacy orphans before cascade delete existed)
-    const withVideo = enriched.filter((row) => row.video != null);
+    const withVideo = enriched
+      .filter((row) => row.video != null)
+      .map((row) => {
+        const canonicalUrl = row.video?.url || row.url || '';
+        if (isHistoricalComparisonAllowedForUrl(canonicalUrl)) return row;
+        return { ...row, previous: null, delta: null };
+      });
 
     res.json(withVideo);
   } catch (err) {
@@ -204,7 +218,7 @@ exports.getCampaignOverview = async (req, res) => {
       const comments = portfolio.latest.comments || 0;
       const eng = totalLikes + totalShares + totalSaves + comments;
       avgEngagementRate =
-        totalViews > 0 ? ((eng / totalViews) * 100).toFixed(2) : '0.00';
+        totalViews > 0 ? engagementRatePct(eng, totalViews).toFixed(2) : '0.00';
     } else {
       totalViews = latest.reduce((s, m) => s + m.views, 0);
       totalLikes = latest.reduce((s, m) => s + m.likes, 0);
@@ -213,7 +227,7 @@ exports.getCampaignOverview = async (req, res) => {
       const totalComments = latest.reduce((s, m) => s + (m.comments || 0), 0);
       const totalEngagement = totalLikes + totalShares + totalSaves + totalComments;
       avgEngagementRate =
-        totalViews > 0 ? ((totalEngagement / totalViews) * 100).toFixed(2) : 0;
+        totalViews > 0 ? engagementRatePct(totalEngagement, totalViews).toFixed(2) : 0;
     }
 
     let topInfluencer = null;
@@ -254,14 +268,13 @@ exports.getCampaignOverview = async (req, res) => {
 };
 
 /**
- * Roll up latest metrics per active video, split by platform (instagram / tiktok / unknown).
+ * Roll up latest metrics per active video for Instagram vs TikTok (response is those two only).
+ * Facebook / unrecognized URLs are rolled internally but omitted from the API payload.
  */
 exports.getPlatformAnalytics = async (req, res) => {
   try {
     const videos = await Video.find({ status: 'active', tenantId: req.tenantId }).lean();
     const videoIds = videos.map((v) => v._id);
-    const videoById = {};
-    for (const v of videos) videoById[v._id.toString()] = v;
 
     const latest = await VideoMetric.aggregate([
       { $match: { videoId: { $in: videoIds }, tenantId: req.tenantId } },
@@ -276,6 +289,8 @@ exports.getPlatformAnalytics = async (req, res) => {
         },
       },
     ]);
+
+    const latestByVideoId = new Map(latest.map((row) => [String(row._id), row]));
 
     const buckets = {
       instagram: {
@@ -304,28 +319,39 @@ exports.getPlatformAnalytics = async (req, res) => {
       },
     };
 
-    for (const m of latest) {
-      const v = videoById[m._id?.toString()];
-      if (!v) continue;
+    for (const v of videos) {
       const raw = effectiveVideoPlatform(v);
       const p = raw === 'facebook' ? 'unknown' : raw;
       const b = buckets[p] || buckets.unknown;
       b.videoCount += 1;
+      const m = latestByVideoId.get(String(v._id));
+      if (!m) continue;
       b.totalViews += m.views || 0;
       b.totalLikes += m.likes || 0;
       b.totalShares += m.shares || 0;
       b.totalSaves += m.saves || 0;
-      const c = (v.creator || '').trim() || 'Unknown';
+      const c =
+        String(v.influencerName || v.creator || '')
+          .trim() || 'Unknown';
       if (!b.creatorViews[c]) b.creatorViews[c] = 0;
       b.creatorViews[c] += m.views || 0;
+    }
+
+    function pickTopCreator(creatorViews) {
+      const entries = Object.entries(creatorViews).filter(([, views]) => views > 0);
+      if (entries.length === 0) return null;
+      entries.sort(
+        (a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), undefined, { sensitivity: 'base' })
+      );
+      const top = entries[0];
+      return { name: top[0], views: top[1] };
     }
 
     function pack(bucket) {
       const eng = bucket.totalLikes + bucket.totalShares + bucket.totalSaves;
       const avgEngagementRate =
-        bucket.totalViews > 0 ? Number(((eng / bucket.totalViews) * 100).toFixed(2)) : 0;
-      const top = Object.entries(bucket.creatorViews).sort((a, b) => b[1] - a[1])[0];
-      const topCreator = top ? { name: top[0], views: top[1] } : null;
+        bucket.totalViews > 0 ? engagementRatePct(eng, bucket.totalViews) : 0;
+      const topCreator = pickTopCreator(bucket.creatorViews);
       return {
         videoCount: bucket.videoCount,
         totalViews: bucket.totalViews,
@@ -340,7 +366,6 @@ exports.getPlatformAnalytics = async (req, res) => {
     res.json({
       instagram: pack(buckets.instagram),
       tiktok: pack(buckets.tiktok),
-      unknown: pack(buckets.unknown),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -371,12 +396,14 @@ exports.getWeeklyTrend = async (req, res) => {
       { $sort: { '_id.y': 1, '_id.w': 1 } },
     ]);
 
-    const data = raw.map((row) => ({
+    let data = raw.map((row) => ({
       weekKey: `${row._id.y}-W${String(row._id.w).padStart(2, '0')}`,
       label: `W${row._id.w} '${String(row._id.y).slice(-2)}`,
       views: row.views,
       engagement: row.engagement,
     }));
+
+    data = padWeeklyTrendIfSingle(data);
 
     res.json(data);
   } catch (err) {
@@ -404,7 +431,24 @@ exports.getDailyViews = async (req, res) => {
       },
     ]);
 
-    res.json(data);
+    const rows = data.map((d) => ({
+      date: d._id,
+      views: d.totalViews,
+      likes: d.totalLikes,
+      shares: d.totalShares,
+      saves: d.totalSaves,
+    }));
+    const filled = fillDailyPortfolioRows(rows, days);
+    const out = filled.map((r) => ({
+      _id: r.date,
+      totalViews: r.views,
+      totalLikes: r.likes,
+      totalShares: r.shares,
+      totalSaves: r.saves,
+      interpolated: r.interpolated,
+    }));
+
+    res.json(out);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -428,7 +472,8 @@ exports.getDailyBreakdown = async (req, res) => {
       engagement: d.likes + d.shares + d.saves,
     }));
 
-    res.json(rows);
+    const filled = fillDailyPortfolioRows(rows, days);
+    res.json(filled);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -454,15 +499,18 @@ function activeVideoMatch(tenantId, platform) {
  * @param {'tiktok'|'instagram'|'facebook'|undefined} [platform] — restrict to this platform
  */
 async function computePortfolioRunComparison(tenantId, platform) {
-  const activeVideos = await Video.find(activeVideoMatch(tenantId, platform)).select('_id').lean();
-  const ids = activeVideos.map((v) => v._id);
+  const activeVideos = await Video.find(activeVideoMatch(tenantId, platform)).select('_id url').lean();
+  const totalActiveCount = activeVideos.length;
+  const ids = activeVideos
+    .filter((v) => isHistoricalComparisonAllowedForUrl(v.url))
+    .map((v) => v._id);
   if (ids.length === 0) {
     return {
       latest: null,
       previous: null,
       pctChange: null,
       videosCompared: 0,
-      activeVideos: 0,
+      activeVideos: totalActiveCount,
     };
   }
 
@@ -523,7 +571,7 @@ async function computePortfolioRunComparison(tenantId, platform) {
       previous: null,
       pctChange: null,
       videosCompared: 0,
-      activeVideos: ids.length,
+      activeVideos: totalActiveCount,
     };
   }
 
@@ -556,7 +604,7 @@ async function computePortfolioRunComparison(tenantId, platform) {
       comments: pctFor(latest.comments, previous.comments),
     },
     videosCompared: r.videosCompared,
-    activeVideos: ids.length,
+    activeVideos: totalActiveCount,
   };
 }
 
@@ -624,7 +672,7 @@ exports.getDashboardKpis = async (req, res) => {
         portfolio.latest.shares +
         portfolio.latest.saves +
         (portfolio.latest.comments || 0);
-      avgEngagementPct = ((eng / portfolio.latest.views) * 100).toFixed(2);
+      avgEngagementPct = engagementRatePct(eng, portfolio.latest.views).toFixed(2);
       if (totalCost > 0) {
         payPerView = totalCost / portfolio.latest.views;
       }
@@ -818,9 +866,7 @@ exports.getInfluencerInsights = async (req, res) => {
       const avgViews =
         row.videoCount > 0 ? Math.round(row.sumViews / row.videoCount) : 0;
       const engagementPct =
-        row.sumViews > 0
-          ? Number(((row.sumEng / row.sumViews) * 100).toFixed(2))
-          : 0;
+        row.sumViews > 0 ? engagementRatePct(row.sumEng, row.sumViews) : 0;
       const topCampaign =
         Object.entries(row.campaigns).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
@@ -955,6 +1001,157 @@ exports.getInfluencerInsights = async (req, res) => {
       });
 
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+function creatorScoreDisplayKey(v) {
+  const a = String(v.influencerName || '').trim();
+  const b = String(v.creator || '').trim();
+  return (a || b || 'Unknown').trim();
+}
+
+/** @param {number[]} values */
+function normalizeMinMax01(values) {
+  const nums = values.map((v) => (Number.isFinite(v) ? v : NaN));
+  const finite = nums.filter((v) => !Number.isNaN(v));
+  if (finite.length === 0) return values.map(() => 0.5);
+  const min = Math.min(...finite);
+  const max = Math.max(...finite);
+  if (Math.abs(max - min) < 1e-12) return values.map(() => 0.5);
+  return nums.map((v) => {
+    if (Number.isNaN(v)) return 0.5;
+    return (v - min) / (max - min);
+  });
+}
+
+// GET /api/metrics/creator-scores – weighted content score + raw signals (optional ?platform= like dashboard KPIs)
+exports.getCreatorScores = async (req, res) => {
+  try {
+    const platform = parseDashboardPlatform(req.query.platform);
+    const vMatch = activeVideoMatch(req.tenantId, platform);
+    const videos = await Video.find(vMatch).lean();
+    const videoById = {};
+    for (const v of videos) videoById[v._id.toString()] = v;
+
+    const latest = await VideoMetric.aggregate([
+      { $match: { tenantId: req.tenantId } },
+      { $sort: { scrapedAt: -1 } },
+      {
+        $group: {
+          _id: '$videoId',
+          views: { $first: '$views' },
+          likes: { $first: '$likes' },
+          saves: { $first: '$saves' },
+        },
+      },
+    ]);
+
+    const mappingDocs = await CreatorOfferMapping.find({ tenantId: req.tenantId }).lean();
+    const mappingByCreatorLower = new Map();
+    for (const mo of mappingDocs) {
+      const key = String(mo.creatorName || '').trim().toLowerCase();
+      if (!key) continue;
+      if (!mappingByCreatorLower.has(key)) {
+        mappingByCreatorLower.set(key, { salesSum: 0 });
+      }
+      const agg = mappingByCreatorLower.get(key);
+      if (mo.sales != null && !Number.isNaN(Number(mo.sales))) {
+        agg.salesSum += Number(mo.sales);
+      }
+    }
+
+    const byCreator = {};
+    for (const m of latest) {
+      const v = videoById[m._id?.toString()];
+      if (!v) continue;
+      const name = creatorScoreDisplayKey(v);
+      if (!byCreator[name]) {
+        byCreator[name] = {
+          name,
+          videoCount: 0,
+          sumViews: 0,
+          sumLikes: 0,
+          sumSaves: 0,
+          sumCost: 0,
+          sumSalesFromVideos: 0,
+        };
+      }
+      const row = byCreator[name];
+      row.videoCount += 1;
+      row.sumViews += Number(m.views) || 0;
+      row.sumLikes += Number(m.likes) || 0;
+      row.sumSaves += Number(m.saves) || 0;
+      if (v.totalCost != null && !Number.isNaN(Number(v.totalCost))) {
+        row.sumCost += Number(v.totalCost);
+      }
+      if (v.sales != null && !Number.isNaN(Number(v.sales))) {
+        row.sumSalesFromVideos += Number(v.sales);
+      }
+    }
+
+    const baseRows = Object.values(byCreator).filter((r) => r.sumViews > 0);
+
+    const rawRows = baseRows.map((row) => {
+      const v = Math.max(1, row.sumViews);
+      const mk = mappingByCreatorLower.get(row.name.trim().toLowerCase());
+      const sumTransactions = row.sumSalesFromVideos + (mk ? mk.salesSum : 0);
+      const engagementRaw = (row.sumLikes + 3 * row.sumSaves) / v;
+      const conversionRaw = sumTransactions / v;
+      const intentRaw = row.sumSaves / v;
+      const cpt =
+        sumTransactions > 0 && row.sumCost > 0 ? row.sumCost / sumTransactions : null;
+      return {
+        name: row.name,
+        videoCount: row.videoCount,
+        sumViews: row.sumViews,
+        sumLikes: row.sumLikes,
+        sumSaves: row.sumSaves,
+        sumCost: row.sumCost,
+        sumTransactions,
+        engagementRaw,
+        conversionRaw,
+        intentRaw,
+        cpt,
+      };
+    });
+
+    const engagementRaws = rawRows.map((r) => r.engagementRaw);
+    const conversionRaws = rawRows.map((r) => r.conversionRaw);
+    const intentRaws = rawRows.map((r) => r.intentRaw);
+    const engN = normalizeMinMax01(engagementRaws);
+    const convN = normalizeMinMax01(conversionRaws);
+    const intentN = normalizeMinMax01(intentRaws);
+
+    const cpts = rawRows.map((r) => (r.cpt != null && Number.isFinite(r.cpt) ? r.cpt : NaN));
+    const cptNorm = normalizeMinMax01(cpts);
+    const creators = rawRows.map((r, i) => {
+      const engagementScore = engN[i] * 100;
+      const conversionScore = convN[i] * 100;
+      const intentScore = intentN[i] * 100;
+      let efficiencyScore = 50;
+      if (r.cpt != null && Number.isFinite(r.cpt)) {
+        efficiencyScore = (1 - cptNorm[i]) * 100;
+      }
+      const contentScore =
+        0.25 * engagementScore +
+        0.35 * conversionScore +
+        0.25 * efficiencyScore +
+        0.15 * intentScore;
+      return {
+        ...r,
+        engagementScore: Number(engagementScore.toFixed(2)),
+        conversionScore: Number(conversionScore.toFixed(2)),
+        efficiencyScore: Number(efficiencyScore.toFixed(2)),
+        intentScore: Number(intentScore.toFixed(2)),
+        contentScore: Number(contentScore.toFixed(2)),
+      };
+    });
+
+    creators.sort((a, b) => b.contentScore - a.contentScore);
+
+    res.json({ creators });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

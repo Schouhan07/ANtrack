@@ -121,7 +121,7 @@ export default function DataMetricsTab() {
     <div className="data-metrics-wrapper">
       {hasRunSummary && (
         <div className="data-metrics-summary-block">
-          <p className="data-metrics-run-caption muted-caption">
+          {/* <p className="data-metrics-run-caption muted-caption">
             Portfolio totals summed over <strong>{videosCompared}</strong> active video
             {videosCompared !== 1 ? 's' : ''} with at least two scrapes. Headline = latest run;
             % = change vs previous run.
@@ -132,7 +132,7 @@ export default function DataMetricsTab() {
                 {fmtShortDate(previous.scrapedAt)}
               </>
             )}
-          </p>
+          </p> */}
           <div className="data-metrics-summary-row">
             {SUMMARY_KEYS.map((m) => {
               const val = latest[m];
@@ -170,10 +170,11 @@ export default function DataMetricsTab() {
         <div className="card-header">
           <div>
             <h2>Growth comparison</h2>
-            <p className="muted-caption">
-              7-day or 14-day window only. Each point = one daily portfolio total (latest scrape per
-              video that day). Same scale as Dashboard — not a sum across days.
-            </p>
+            {/* <p className="muted-caption">
+              Each day shows the portfolio total from the latest scrape that day. Days without a
+              scrape carry forward the previous day&apos;s total so trends draw as continuous lines
+              (not isolated dots).
+            </p> */}
           </div>
           <div className="data-metrics-range">
             {RANGE_OPTIONS.map((opt) => (
@@ -217,32 +218,47 @@ export default function DataMetricsTab() {
             </div>
 
             <ResponsiveContainer width="100%" height={380}>
-              <AreaChart data={data} margin={{ left: 4, right: 4, top: 8, bottom: 0 }}>
+              <AreaChart
+                data={data}
+                margin={{ left: 8, right: 12, top: 12, bottom: 4 }}
+              >
                 <defs>
                   {METRIC_DEFS.map((m) => (
                     <linearGradient key={m.key} id={`grad-${m.key}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={m.color} stopOpacity={0.2} />
-                      <stop offset="95%" stopColor={m.color} stopOpacity={0} />
+                      <stop offset="0%" stopColor={m.color} stopOpacity={0.22} />
+                      <stop offset="92%" stopColor={m.color} stopOpacity={0.04} />
+                      <stop offset="100%" stopColor={m.color} stopOpacity={0} />
                     </linearGradient>
                   ))}
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e8ecf1" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e8ecf1" vertical={false} />
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 11 }}
+                  tickMargin={8}
                   tickFormatter={(d) => {
-                    const parts = d.split('-');
+                    const parts = String(d).split('-');
                     return `${parts[1]}/${parts[2]}`;
                   }}
                 />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={fmt} />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={fmt}
+                  width={44}
+                  tickMargin={6}
+                />
                 <Tooltip
-                  formatter={(value, name) => [
-                    typeof value === 'number' ? value.toLocaleString() : value,
-                    METRIC_DEFS.find((mm) => mm.key === name)?.label || name,
-                  ]}
+                  formatter={(value, name, props) => {
+                    const label = METRIC_DEFS.find((mm) => mm.key === name)?.label || name;
+                    const suffix =
+                      props?.payload?.interpolated === true ? ' (carried forward)' : '';
+                    return [
+                      `${typeof value === 'number' ? value.toLocaleString() : value}${suffix}`,
+                      label,
+                    ];
+                  }}
                   labelFormatter={(d) => {
-                    const date = new Date(d);
+                    const date = new Date(`${d}T12:00:00Z`);
                     return date.toLocaleDateString(undefined, {
                       weekday: 'short',
                       month: 'short',
@@ -269,10 +285,27 @@ export default function DataMetricsTab() {
                         type="monotone"
                         dataKey={m.key}
                         stroke={m.color}
-                        strokeWidth={2.5}
+                        strokeWidth={2.75}
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
                         fill={`url(#grad-${m.key})`}
-                        dot={false}
-                        activeDot={{ r: 4 }}
+                        isAnimationActive={false}
+                        connectNulls
+                        dot={(dotProps) => {
+                          const { cx, cy, payload } = dotProps;
+                          if (payload?.interpolated || cx == null || cy == null) return null;
+                          return (
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={3.5}
+                              fill={m.color}
+                              stroke="#fff"
+                              strokeWidth={1.25}
+                            />
+                          );
+                        }}
+                        activeDot={{ r: 6, strokeWidth: 2, stroke: '#fff' }}
                       />
                     )
                 )}

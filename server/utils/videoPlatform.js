@@ -28,7 +28,8 @@ function scrapeActorForVideo(doc) {
 
 /**
  * Mongo fragment for `Video.find` / `$match` when filtering by dashboard / list platform.
- * Uses URL regex OR stored platform so KPIs and tables include mis-tagged rows.
+ * Matches {@link effectiveVideoPlatform}: URL wins over stored `platform` so Analytics cards,
+ * dashboard KPIs, and video lists stay in sync (no double-count across networks).
  * @param {'tiktok'|'instagram'|'facebook'} platform
  */
 function videoMatchFragmentForPlatform(platform) {
@@ -36,21 +37,41 @@ function videoMatchFragmentForPlatform(platform) {
   if (p === 'tiktok') {
     return {
       $or: [
-        { platform: 'tiktok' },
         { url: { $regex: /tiktok\.com|vm\.tiktok|vt\.tiktok/i } },
+        {
+          $and: [
+            { url: { $not: /instagram\.com|instagr\.am/i } },
+            { platform: 'tiktok' },
+          ],
+        },
       ],
     };
   }
   if (p === 'instagram') {
     return {
       $or: [
-        { platform: 'instagram' },
         { url: { $regex: /instagram\.com|instagr\.am/i } },
+        {
+          $and: [
+            { url: { $not: /tiktok\.com|vm\.tiktok|vt\.tiktok/i } },
+            { platform: 'instagram' },
+          ],
+        },
       ],
     };
   }
   if (p === 'facebook') {
-    return { platform: 'facebook' };
+    return {
+      $or: [
+        { url: { $regex: /facebook\.com|fb\.com|fb\.watch/i } },
+        {
+          $and: [
+            { url: { $not: /instagram\.com|instagr\.am|tiktok\.com|vm\.tiktok|vt\.tiktok/i } },
+            { platform: 'facebook' },
+          ],
+        },
+      ],
+    };
   }
   return {};
 }

@@ -1,34 +1,28 @@
-import React, { useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import VideoTrackingTab from '../components/VideoTrackingTab';
-import DashboardTabNav, {
-  dashboardTabFromSearchParam,
-  DASHBOARD_TAB_SUBTITLES,
-} from '../components/DashboardTabNav';
-
-const VT_TAB_PARAM = 'vt';
 
 export default function VideoTrackingPage() {
   const [searchParams] = useSearchParams();
-  const navTab = useMemo(
-    () => dashboardTabFromSearchParam(searchParams, VT_TAB_PARAM),
-    [searchParams]
-  );
-  const subtitle =
-    navTab === 'summary'
-      ? 'Per-video metrics, filters, and export.'
-      : DASHBOARD_TAB_SUBTITLES[navTab] || DASHBOARD_TAB_SUBTITLES.summary;
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!searchParams.has('vt')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('vt');
+    const qs = next.toString();
+    navigate({ pathname: location.pathname, search: qs ? `?${qs}` : '' }, { replace: true });
+  }, [searchParams, navigate, location.pathname]);
 
   return (
     <div className="page-dashboard page-overview">
       <div className="page-header page-header--hero">
         <div className="page-header-titles">
           <h1>Video tracking</h1>
-          <p className="page-subtitle">{subtitle}</p>
+          <p className="page-subtitle">Per-video metrics, filters, and export.</p>
         </div>
       </div>
-
-      <DashboardTabNav linkSearchParam={VT_TAB_PARAM} selectedTabId={navTab} />
 
       <div className="dashboard-tab-panels-region">
         <VideoTrackingTab />

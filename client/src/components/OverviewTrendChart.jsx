@@ -45,10 +45,15 @@ export default function OverviewTrendChart({ weeks = 8 }) {
     () =>
       raw.map((d) => ({
         ...d,
-        engagementRate: d.views > 0 ? d.engagement / d.views : 0,
+        engagementRate:
+          Number(d.views) > 0
+            ? Math.max(0, Number(d.engagement) / Number(d.views))
+            : 0,
       })),
     [raw]
   );
+
+  const showDots = data.length > 0 && data.length <= 18;
 
   if (raw.length === 0) {
     return (
@@ -74,7 +79,8 @@ export default function OverviewTrendChart({ weeks = 8 }) {
       <div className="overview-trend-chart__head">
         <h2 className="overview-trend-chart__title">Trend analysis</h2>
         <p className="overview-trend-chart__lead">
-          Views vs engagement rate (last {weeks} weeks, by scrape activity)
+          Views vs engagement rate (last {weeks} weeks). Weeks with scrapes are connected; if only
+          one week has data yet, a short segment is drawn so the line is visible.
         </p>
         <div className="overview-trend-chart__legend" aria-hidden>
           <span className="overview-trend-chart__legend-item">
@@ -90,7 +96,10 @@ export default function OverviewTrendChart({ weeks = 8 }) {
 
       <div className="overview-trend-chart__plot">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+          <LineChart
+            data={data}
+            margin={{ top: 10, right: 14, left: 4, bottom: 8 }}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} vertical={false} />
             <XAxis
               dataKey="label"
@@ -126,9 +135,12 @@ export default function OverviewTrendChart({ weeks = 8 }) {
                 color: '#e2e8f0',
               }}
               labelStyle={{ color: '#94a3b8', fontWeight: 600 }}
-              formatter={(value, name) => {
-                if (name === 'views') return [formatNumber(value), 'Views'];
-                if (name === 'engagementRate') return [formatPercent(value), 'Engagement rate'];
+              formatter={(value, name, item) => {
+                const interp = item?.payload?.interpolated === true;
+                const carry = interp ? ' (same week · segment)' : '';
+                if (name === 'views') return [`${formatNumber(value)}${carry}`, 'Views'];
+                if (name === 'engagementRate')
+                  return [`${formatPercent(value)}${carry}`, 'Engagement rate'];
                 return [value, name];
               }}
               labelFormatter={(label) => String(label)}
@@ -140,8 +152,24 @@ export default function OverviewTrendChart({ weeks = 8 }) {
               name="views"
               stroke={CHART.primary}
               strokeWidth={3}
-              dot={false}
-              activeDot={{ r: 5, strokeWidth: 0 }}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              dot={(dotProps) => {
+                if (dotProps.payload?.interpolated) return null;
+                if (!showDots || dotProps.cx == null) return null;
+                return (
+                  <circle
+                    cx={dotProps.cx}
+                    cy={dotProps.cy}
+                    r={4}
+                    stroke="#0f172a"
+                    strokeWidth={2}
+                    fill={CHART.primary}
+                  />
+                );
+              }}
+              isAnimationActive={false}
+              activeDot={{ r: 6, strokeWidth: 2, stroke: '#fff', fill: CHART.primary }}
             />
             <Line
               yAxisId="right"
@@ -149,10 +177,26 @@ export default function OverviewTrendChart({ weeks = 8 }) {
               dataKey="engagementRate"
               name="engagementRate"
               stroke={CHART.secondary}
-              strokeWidth={2}
-              strokeDasharray="5 5"
-              dot={false}
-              activeDot={{ r: 4, strokeWidth: 0 }}
+              strokeWidth={2.5}
+              strokeDasharray="6 4"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              dot={(dotProps) => {
+                if (dotProps.payload?.interpolated) return null;
+                if (!showDots || dotProps.cx == null) return null;
+                return (
+                  <circle
+                    cx={dotProps.cx}
+                    cy={dotProps.cy}
+                    r={3.5}
+                    stroke="#0f172a"
+                    strokeWidth={2}
+                    fill={CHART.secondary}
+                  />
+                );
+              }}
+              isAnimationActive={false}
+              activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff', fill: CHART.secondary }}
             />
           </LineChart>
         </ResponsiveContainer>

@@ -10,6 +10,13 @@ export const DASHBOARD_TABS = [
   { id: 'performance', label: 'Performance', icon: '🎬' },
 ];
 
+/** Creators page only — Summary + score + lookalikes (no dashboard metrics tabs). */
+export const CREATORS_TABS = [
+  { id: 'summary', label: 'Summary', icon: '📊' },
+  { id: 'creator-score', label: 'Creator score', icon: '⭐' },
+  { id: 'lookalike', label: 'Lookalike creators', icon: '🔮' },
+];
+
 export const DASHBOARD_TAB_SUBTITLES = {
   summary: 'Portfolio KPIs, trends, and charts in one place.',
   metrics: 'Daily breakdown and latest vs previous scrape comparison.',
@@ -19,19 +26,34 @@ export const DASHBOARD_TAB_SUBTITLES = {
   performance: 'Scrape fresh metrics and review per-video performance.',
 };
 
-/** Read a dashboard-style tab id from a URLSearchParams-like object (e.g. `?vt=metrics`). */
-export function dashboardTabFromSearchParam(searchParams, paramName) {
+export const CREATORS_TAB_SUBTITLES = {
+  summary: 'Roster performance and influencer insights.',
+  'creator-score': 'Top creators by weighted content score (engagement, conversion, efficiency, intent).',
+  lookalike: 'Reserved for future lookalike discovery.',
+};
+
+/** Read a dashboard-style tab id from a URLSearchParams-like object (e.g. `?cr=creator-score`). */
+export function dashboardTabFromSearchParam(
+  searchParams,
+  paramName,
+  tabs = DASHBOARD_TABS
+) {
   if (!paramName) return 'summary';
   const t = searchParams.get(paramName);
-  if (t && DASHBOARD_TABS.some((x) => x.id === t)) return t;
+  if (t && tabs.some((x) => x.id === t)) return t;
   return 'summary';
 }
 
 /**
  * Same tab strip as Dashboard.
- * `linkSearchParam`: stay on current route; set/clear this query key (e.g. `vt` on video-tracking, `cr` on creators).
+ * `linkSearchParam`: stay on current route; set/clear this query key (e.g. `cr` on creators).
  */
-export default function DashboardTabNav({ selectedTabId, onTabSelect, linkSearchParam }) {
+export default function DashboardTabNav({
+  selectedTabId,
+  onTabSelect,
+  linkSearchParam,
+  tabs = DASHBOARD_TABS,
+}) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -53,7 +75,7 @@ export default function DashboardTabNav({ selectedTabId, onTabSelect, linkSearch
   return (
     <div className="dashboard-tabs dashboard-tabs--top-bar dashboard-tabs--before-page">
       <div className="dashboard-tabs-bar" role="tablist">
-        {DASHBOARD_TABS.map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"

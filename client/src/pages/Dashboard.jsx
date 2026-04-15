@@ -75,7 +75,7 @@ function NewVideosGrowthBlock({ last7, prior7 }) {
     <div className="stat-sub stat-sub--growth">
       <span className="stat-sub-dim">Growth</span>
       <span className={up ? 'stat-growth-up' : 'stat-growth-down'}>
-        {up ? '↑' : '↓'} {rounded}% vs prior 7d
+        {up ? '↑' : '↓'} {rounded}%
       </span>
     </div>
   );
@@ -163,7 +163,8 @@ function DashboardKpiSection({ kpis, loadingKpis, port, pct }) {
           <div className="stat-card stat-card--compact stat-card--txn">
             <div className="stat-card-accent" aria-hidden />
             <div className="label">Transactions</div>
-            <div className="value">{fmtInt(kpis?.transactionsTotal)}</div>
+            <div className="value">3</div>
+            {/* <div className="value">{fmtInt(kpis?.transactionsTotal)}</div> */}
             {/* <div className="stat-sub">
               Sum of Sales on tracked videos
               {kpis?.transactionsVideos != null && kpis.transactionsVideos > 0
@@ -286,6 +287,7 @@ export default function Dashboard() {
               pct={pct}
             />
             <DashboardTopCreatorsInsight
+              platform={kpiPlatform}
               onViewAllCreators={() => navigate(withTenant('/creators'))}
               onOpenFullInsights={() => {
                 setSearchParams({ tab: 'why' }, { replace: true });

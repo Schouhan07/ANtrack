@@ -69,11 +69,11 @@ function AddVideosCard({ initiatedBy, loading, setLoading, onBatchResult }) {
   return (
     <div className="upload-card">
       <h3>Add videos</h3>
-      <p className="bulk-initiated-hint">
-        Optionally set campaign and line of business, then paste post URLs by platform (one per
+      {/* <p className="bulk-initiated-hint">
+        Enter campaign through coupon code as needed, then paste post URLs by platform (one per
         line). Filled fields apply to every URL in this submit. Creator details can still sync after
         the first scrape where supported.
-      </p>
+      </p> */}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div className="form-group">
@@ -100,6 +100,53 @@ function AddVideosCard({ initiatedBy, loading, setLoading, onBatchResult }) {
             <option value="FERRY">FERRY</option>
             <option value="TTD">TTD</option>
           </select>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="add-video-influencer">Influencer name</label>
+          <input
+            id="add-video-influencer"
+            type="text"
+            value={form.influencerName}
+            onChange={(e) => setField('influencerName', e.target.value)}
+            placeholder="Display name"
+            autoComplete="off"
+          />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="add-video-publish">Video publish date</label>
+          <input
+            id="add-video-publish"
+            type="date"
+            value={form.publishDate}
+            onChange={(e) => setField('publishDate', e.target.value)}
+          />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="add-video-cost">Total cost (optional)</label>
+          <input
+            id="add-video-cost"
+            type="number"
+            min="0"
+            step="0.01"
+            value={form.totalCost}
+            onChange={(e) => setField('totalCost', e.target.value)}
+            placeholder="Optional"
+          />
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="add-video-offer">Coupon code used</label>
+          <input
+            id="add-video-offer"
+            type="text"
+            value={form.offerCode}
+            onChange={(e) => setField('offerCode', e.target.value)}
+            placeholder="Offer / promo code"
+            autoComplete="off"
+          />
         </div>
 
         <div className="form-group">
@@ -149,53 +196,6 @@ function AddVideosCard({ initiatedBy, loading, setLoading, onBatchResult }) {
               />
             </div>
           </div>
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="add-video-publish">Video publish date</label>
-          <input
-            id="add-video-publish"
-            type="date"
-            value={form.publishDate}
-            onChange={(e) => setField('publishDate', e.target.value)}
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="add-video-influencer">Influencer name</label>
-          <input
-            id="add-video-influencer"
-            type="text"
-            value={form.influencerName}
-            onChange={(e) => setField('influencerName', e.target.value)}
-            placeholder="Display name"
-            autoComplete="off"
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="add-video-cost">Total cost (optional)</label>
-          <input
-            id="add-video-cost"
-            type="number"
-            min="0"
-            step="0.01"
-            value={form.totalCost}
-            onChange={(e) => setField('totalCost', e.target.value)}
-            placeholder="Optional"
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="add-video-offer">Coupon code used</label>
-          <input
-            id="add-video-offer"
-            type="text"
-            value={form.offerCode}
-            onChange={(e) => setField('offerCode', e.target.value)}
-            placeholder="Offer / promo code"
-            autoComplete="off"
-          />
         </div>
       </div>
 
@@ -349,11 +349,11 @@ export default function BulkUpload() {
 
       <div className="upload-card">
         <h3>Upload Excel (.xlsx, .xls, .csv)</h3>
-        <p className="bulk-initiated-hint" style={{ marginBottom: 12 }}>
+        {/* <p className="bulk-initiated-hint" style={{ marginBottom: 12 }}>
           Row 1 must be these headers only (order can vary; names are case-insensitive). Each data
           row can list multiple URLs in TikTok, Instagram, and/or Facebook cells—one URL per line.
           Empty campaign cells are fine. Initiated by uses the same Brand / Supply choice as above.
-        </p>
+        </p> */}
         <pre
           className="bulk-excel-headers-preview"
           style={{
@@ -368,13 +368,13 @@ export default function BulkUpload() {
           {[
             'Campaign name',
             'Line of business',
+            'Influencer name',
+            'Video publish date',
+            'Total cost (optional)',
+            'Coupon code used',
             'TikTok',
             'Instagram',
             'Facebook',
-            'Video publish date',
-            'Influencer name',
-            'Total cost (optional)',
-            'Coupon code used',
           ].join('\t')}
         </pre>
         <input

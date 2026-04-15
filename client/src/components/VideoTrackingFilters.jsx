@@ -8,10 +8,6 @@ export const INITIAL_TRACKING_FILTERS = {
   viewsMax: '',
   engagementMin: '',
   engagementMax: '',
-  sharesMin: '',
-  sharesMax: '',
-  savesMin: '',
-  savesMax: '',
 };
 
 /**
@@ -112,54 +108,6 @@ export default function VideoTrackingFilters({ filters, onFilterChange, onClear 
               value={f.engagementMax}
               onChange={(e) => onFilterChange('engagementMax', e.target.value)}
               aria-label="Engagement percent maximum"
-            />
-          </div>
-        </div>
-        <div className="video-tracking-filter-field video-tracking-filter-field--range">
-          <span className="video-tracking-filter-label">Shares</span>
-          <div className="video-tracking-filter-range">
-            <input
-              type="text"
-              inputMode="numeric"
-              className="video-tracking-filter-input"
-              placeholder="Min"
-              value={f.sharesMin}
-              onChange={(e) => onFilterChange('sharesMin', e.target.value)}
-              aria-label="Shares minimum"
-            />
-            <span aria-hidden>–</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              className="video-tracking-filter-input"
-              placeholder="Max"
-              value={f.sharesMax}
-              onChange={(e) => onFilterChange('sharesMax', e.target.value)}
-              aria-label="Shares maximum"
-            />
-          </div>
-        </div>
-        <div className="video-tracking-filter-field video-tracking-filter-field--range">
-          <span className="video-tracking-filter-label">Saves</span>
-          <div className="video-tracking-filter-range">
-            <input
-              type="text"
-              inputMode="numeric"
-              className="video-tracking-filter-input"
-              placeholder="Min"
-              value={f.savesMin}
-              onChange={(e) => onFilterChange('savesMin', e.target.value)}
-              aria-label="Saves minimum"
-            />
-            <span aria-hidden>–</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              className="video-tracking-filter-input"
-              placeholder="Max"
-              value={f.savesMax}
-              onChange={(e) => onFilterChange('savesMax', e.target.value)}
-              aria-label="Saves maximum"
             />
           </div>
         </div>

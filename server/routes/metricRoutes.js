@@ -12,6 +12,7 @@ const {
   getDashboardKpis,
   getTopCreators,
   getInfluencerInsights,
+  getCreatorScores,
   scrapeNow,
 } = require('../controllers/metricController');
 
@@ -26,6 +27,7 @@ router.get('/portfolio-run-comparison', getPortfolioRunComparison);
 router.get('/dashboard-kpis', getDashboardKpis);
 router.get('/top-creators', getTopCreators);
 router.get('/influencers', getInfluencerInsights);
+router.get('/creator-scores', getCreatorScores);
 router.post('/scrape-now', scrapeNow);
 
 module.exports = router;

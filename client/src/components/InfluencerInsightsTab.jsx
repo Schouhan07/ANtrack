@@ -327,7 +327,7 @@ export default function InfluencerInsightsTab() {
           <div className="stat-card-accent" aria-hidden />
           <div className="label">Portfolio views</div>
           <div className="value">{kpis.portfolioViews.toLocaleString()}</div>
-          <div className="stat-sub">Σ (avg views × videos)</div>
+          {/* <div className="stat-sub">Σ (avg views × videos)</div> */}
         </div>
         <div className="stat-card stat-card--compact stat-card--engagement">
           <div className="stat-card-accent" aria-hidden />
