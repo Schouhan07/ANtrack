@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { loginRequest } from '../services/api';
 import AuthPageShell from '../components/auth/AuthPageShell';
+import PasswordField from '../components/auth/PasswordField';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -77,24 +78,15 @@ export default function Login() {
             />
           </div>
         </label>
-        <label className="auth-field" htmlFor="login-password">
-          <span className="auth-field-label auth-field-label-row">
-            <span>Password</span>
-            <span className="auth-field-hint-muted">Forgot? Contact your admin.</span>
-          </span>
-          <div className="auth-input-wrap">
-            <input
-              id="login-password"
-              className="auth-input"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-            />
-          </div>
-        </label>
+        <PasswordField
+          id="login-password"
+          label="Password"
+          labelEnd={<span className="auth-field-hint-muted">Forgot? Contact your admin.</span>}
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
         <button type="submit" className="auth-btn-primary" disabled={loading}>
           {loading ? 'Signing in…' : 'Sign in'}
         </button>

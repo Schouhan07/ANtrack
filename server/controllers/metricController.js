@@ -493,6 +493,118 @@ function activeVideoMatch(tenantId, platform) {
 }
 
 /**
+ * Same merged sales basis as GET /metrics/influencers (Creators tab): per creator,
+ * sum of video `sales` for their tracked videos + sum of CreatorOfferMapping.sales
+ * matched by creator name (case-insensitive). Optionally mapping-only rows when
+ * `includeMappingOnly` (platform filter "all").
+ */
+async function computeMergedSalesLikeCreatorsTab(tenantId, platform) {
+  const vMatch = activeVideoMatch(tenantId, platform);
+  const videos = await Video.find(vMatch).lean();
+  const videoById = {};
+  for (const v of videos) videoById[v._id.toString()] = v;
+  const videoIds = videos.map((v) => v._id);
+
+  let latest = [];
+  if (videoIds.length > 0) {
+    latest = await VideoMetric.aggregate([
+      { $match: { tenantId, videoId: { $in: videoIds } } },
+      { $sort: { scrapedAt: -1 } },
+      {
+        $group: {
+          _id: '$videoId',
+          views: { $first: '$views' },
+          likes: { $first: '$likes' },
+          shares: { $first: '$shares' },
+          saves: { $first: '$saves' },
+        },
+      },
+    ]);
+  }
+
+  const byCreator = {};
+  for (const m of latest) {
+    const v = videoById[m._id?.toString()];
+    if (!v) continue;
+    const raw = (v.creator || '').trim();
+    const name = raw || 'Unknown';
+    if (!byCreator[name]) {
+      byCreator[name] = {
+        name,
+        salesSum: 0,
+        salesVideoCount: 0,
+        offerCodes: new Set(),
+      };
+    }
+    const row = byCreator[name];
+    if (v.offerCode && String(v.offerCode).trim()) {
+      row.offerCodes.add(String(v.offerCode).trim());
+    }
+    if (v.sales != null && !Number.isNaN(Number(v.sales))) {
+      row.salesSum += Number(v.sales);
+      row.salesVideoCount += 1;
+    }
+  }
+
+  const mappingDocs = await CreatorOfferMapping.find({ tenantId }).lean();
+  const mappingByCreatorLower = new Map();
+  for (const mo of mappingDocs) {
+    const key = String(mo.creatorName || '').trim().toLowerCase();
+    if (!key) continue;
+    if (!mappingByCreatorLower.has(key)) {
+      mappingByCreatorLower.set(key, {
+        codes: new Set(),
+        salesSum: 0,
+        displayName: String(mo.creatorName).trim(),
+      });
+    }
+    const agg = mappingByCreatorLower.get(key);
+    if (!agg.displayName) agg.displayName = String(mo.creatorName).trim();
+    agg.codes.add(mo.offerCode);
+    if (mo.sales != null && !Number.isNaN(Number(mo.sales))) {
+      agg.salesSum += Number(mo.sales);
+    }
+  }
+
+  const rows = [];
+  for (const row of Object.values(byCreator)) {
+    const mk = mappingByCreatorLower.get(row.name.trim().toLowerCase());
+    if (mk) {
+      for (const c of mk.codes) row.offerCodes.add(c);
+    }
+    const fromVideos = row.salesVideoCount > 0 ? row.salesSum : 0;
+    const fromMaps = mk ? mk.salesSum : 0;
+    const salesMerged =
+      row.salesVideoCount > 0 || fromMaps > 0 ? fromVideos + fromMaps : null;
+    rows.push({ name: row.name, sales: salesMerged });
+  }
+
+  const includeMappingOnly = !platform;
+  if (includeMappingOnly) {
+    const seenNames = new Set(rows.map((r) => r.name.trim().toLowerCase()));
+    for (const [lower, mk] of mappingByCreatorLower) {
+      if (seenNames.has(lower)) continue;
+      seenNames.add(lower);
+      const fromMaps = mk.salesSum;
+      rows.push({
+        name: mk.displayName || lower,
+        sales: fromMaps > 0 ? fromMaps : null,
+      });
+    }
+  }
+
+  let transactionsTotal = 0;
+  let transactionsCreators = 0;
+  for (const r of rows) {
+    if (r.sales == null) continue;
+    transactionsTotal += r.sales;
+    if (r.sales > 0) transactionsCreators += 1;
+  }
+
+  return { transactionsTotal, transactionsCreators };
+}
+
+/**
  * Portfolio totals for dashboard, campaign overview, and AI context.
  * - latest: sum of each scoped video's newest scrape (matches GET /metrics/platform-analytics when filtered).
  * - pctChange: summed latest vs previous scrape only for videos with ≥2 rows (same scope), so % is comparable.
@@ -664,7 +776,7 @@ exports.getDashboardKpis = async (req, res) => {
     const prev7Start = new Date(now);
     prev7Start.setDate(prev7Start.getDate() - 14);
 
-    const [videosNewLast7d, videosNewPrior7d, costRow] = await Promise.all([
+    const [videosNewLast7d, videosNewPrior7d, costRow, mergedSales] = await Promise.all([
       Video.countDocuments({
         ...vMatch,
         addedDate: { $gte: last7 },
@@ -679,20 +791,15 @@ exports.getDashboardKpis = async (req, res) => {
           $group: {
             _id: null,
             totalCost: { $sum: { $ifNull: ['$totalCost', 0] } },
-            totalSales: { $sum: { $ifNull: ['$sales', 0] } },
-            withSales: {
-              $sum: {
-                $cond: [{ $gt: [{ $ifNull: ['$sales', 0] }, 0] }, 1, 0],
-              },
-            },
           },
         },
       ]),
+      computeMergedSalesLikeCreatorsTab(req.tenantId, platform),
     ]);
 
     const totalCost = costRow[0]?.totalCost ?? 0;
-    const transactionsTotal = costRow[0]?.totalSales ?? 0;
-    const transactionsVideos = costRow[0]?.withSales ?? 0;
+    const transactionsTotal = mergedSales.transactionsTotal;
+    const transactionsCreators = mergedSales.transactionsCreators;
 
     let payPerView = null;
     let avgEngagementPct = null;
@@ -717,7 +824,8 @@ exports.getDashboardKpis = async (req, res) => {
       payPerView,
       totalCost,
       transactionsTotal,
-      transactionsVideos,
+      /** Creators with merged sales > 0 (same basis as Creators tab). */
+      transactionsCreators,
       platformFilter: platform || null,
     });
   } catch (err) {

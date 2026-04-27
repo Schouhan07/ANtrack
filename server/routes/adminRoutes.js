@@ -8,6 +8,7 @@ router.patch('/applications/:id/approve', applicationController.approveApplicati
 router.patch('/applications/:id/reject', applicationController.rejectApplication);
 
 router.get('/users', adminController.listUsers);
+router.get('/users/:id', adminController.getUser);
 router.post('/users', adminController.createUser);
 router.patch('/users/:id', adminController.updateUser);
 

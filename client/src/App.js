@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Apply from './pages/Apply';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminApplications from './pages/admin/AdminApplications';
+import AdminUserProfile from './pages/admin/AdminUserProfile';
 import AdminUsers from './pages/AdminUsers';
 import TenantShell from './pages/TenantShell';
 
@@ -47,6 +48,7 @@ function App() {
           <Route index element={<Navigate to="applications" replace />} />
           <Route path="applications" element={<AdminApplications />} />
           <Route path="users" element={<AdminUsers />} />
+          <Route path="users/:id" element={<AdminUserProfile />} />
         </Route>
         <Route
           path="/:tenant/*"

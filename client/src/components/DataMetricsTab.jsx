@@ -292,10 +292,12 @@ export default function DataMetricsTab() {
                         isAnimationActive={false}
                         connectNulls
                         dot={(dotProps) => {
-                          const { cx, cy, payload } = dotProps;
+                          const { cx, cy, payload, index } = dotProps;
                           if (payload?.interpolated || cx == null || cy == null) return null;
+                          const dotKey = payload?.date ?? index;
                           return (
                             <circle
+                              key={`${m.key}-${dotKey}`}
                               cx={cx}
                               cy={cy}
                               r={3.5}

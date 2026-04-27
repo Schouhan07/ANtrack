@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { fetchTenantsMeta, submitAccessRequest } from '../services/api';
 import AuthPageShell from '../components/auth/AuthPageShell';
+import PasswordField from '../components/auth/PasswordField';
 
 export default function Apply() {
   const navigate = useNavigate();
@@ -109,23 +110,20 @@ export default function Apply() {
             />
           </div>
         </label>
-        <label className="auth-field" htmlFor="apply-password">
-          <span className="auth-field-label">Password</span>
-          <div className="auth-input-wrap">
-            <input
-              id="apply-password"
-              className="auth-input"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={8}
-              placeholder="••••••••"
-              required
-            />
-          </div>
-          <p className="auth-field-hint">At least 8 characters. You will use this password after approval.</p>
-        </label>
+        <PasswordField
+          id="apply-password"
+          label="Password"
+          autoComplete="new-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          minLength={8}
+          required
+          hint={
+            <p className="auth-field-hint">
+              At least 8 characters. You will use this password after approval.
+            </p>
+          }
+        />
 
         <div className="auth-field">
           <span className="auth-field-label">Country / region access</span>

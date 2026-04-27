@@ -28,6 +28,7 @@ const debugController = require('./controllers/debugController');
 const applicationController = require('./controllers/applicationController');
 const { listTenants } = require('./config/tenants');
 const { authenticate, requireSuperAdmin } = require('./middleware/auth');
+const { resolveActingUser } = require('./middleware/actingUser');
 const { resolveTenant } = require('./middleware/tenant');
 
 // API catalog (list all routes) — register before other /api mounts
@@ -41,7 +42,7 @@ app.post('/api/access-requests', applicationController.submitAccessRequest);
 
 app.use('/api/auth', require('./routes/authRoutes'));
 
-const scoped = [authenticate, resolveTenant];
+const scoped = [authenticate, resolveActingUser, resolveTenant];
 app.use('/api/debug', authenticate, requireSuperAdmin, require('./routes/debugRoutes'));
 app.use('/api/videos', scoped, require('./routes/videoRoutes'));
 app.use('/api/metrics', scoped, require('./routes/metricRoutes'));

@@ -131,6 +131,7 @@ export default function AdminUsers() {
                 <th>Role</th>
                 <th>Tenants / regions</th>
                 <th>Last login</th>
+                <th>Profile</th>
                 <th />
               </tr>
             </thead>
@@ -145,6 +146,11 @@ export default function AdminUsers() {
                       : (u.tenantLabels || []).map((t) => t.label).join(', ') || '—'}
                   </td>
                   <td>{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : '—'}</td>
+                  <td>
+                    <Link to={`/admin/users/${u.id}`} className="btn btn-secondary btn-sm">
+                      Open profile
+                    </Link>
+                  </td>
                   <td>
                     {u.role !== 'super_admin' && (
                       <button

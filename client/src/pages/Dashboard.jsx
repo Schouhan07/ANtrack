@@ -144,14 +144,14 @@ function DashboardKpiSection({ kpis, loadingKpis, port, pct }) {
           <div className="stat-card stat-card--compact stat-card--txn">
             <div className="stat-card-accent" aria-hidden />
             <div className="label">Transactions</div>
-            <div className="value">4137</div>
-            {/* <div className="value">{fmtInt(kpis?.transactionsTotal)}</div> */}
-            {/* <div className="stat-sub">
-              Sum of Sales on tracked videos
-              {kpis?.transactionsVideos != null && kpis.transactionsVideos > 0
-                ? ` · ${kpis.transactionsVideos} video${kpis.transactionsVideos !== 1 ? 's' : ''} with sales`
-                : ''}
-            </div> */}
+            {/* <div className="value">4137</div> */}
+            <div className="value">{fmtInt(kpis?.transactionsTotal)}</div>
+            <div className="stat-sub">
+              {/* Same as Creators tab: video sales + offer-map sales per creator
+              {kpis?.transactionsCreators != null && kpis.transactionsCreators > 0
+                ? ` · ${kpis.transactionsCreators} creator${kpis.transactionsCreators !== 1 ? 's' : ''} with sales`
+                : ''} */}
+            </div>
           </div>
         </div>
       )}
@@ -168,7 +168,7 @@ function DashboardKpiSection({ kpis, loadingKpis, port, pct }) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { withTenant } = useTenantPath();
+  const { withTenant, tenant } = useTenantPath();
   const [kpis, setKpis] = useState(null);
   const [loadingKpis, setLoadingKpis] = useState(true);
   const [scraping, setScraping] = useState(false);
@@ -195,7 +195,7 @@ export default function Dashboard() {
         toast.error('Could not load dashboard metrics');
       })
       .finally(() => setLoadingKpis(false));
-  }, [kpiPlatform]);
+  }, [kpiPlatform, tenant]);
 
   useEffect(() => {
     loadKpis();

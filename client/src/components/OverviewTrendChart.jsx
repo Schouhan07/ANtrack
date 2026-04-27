@@ -157,8 +157,13 @@ export default function OverviewTrendChart({ weeks = 8 }) {
               dot={(dotProps) => {
                 if (dotProps.payload?.interpolated) return null;
                 if (!showDots || dotProps.cx == null) return null;
+                const dotKey =
+                  dotProps.payload?.weekKey ??
+                  dotProps.payload?.label ??
+                  `i${dotProps.index}`;
                 return (
                   <circle
+                    key={`views-${dotKey}-${dotProps.index}`}
                     cx={dotProps.cx}
                     cy={dotProps.cy}
                     r={4}
@@ -184,8 +189,13 @@ export default function OverviewTrendChart({ weeks = 8 }) {
               dot={(dotProps) => {
                 if (dotProps.payload?.interpolated) return null;
                 if (!showDots || dotProps.cx == null) return null;
+                const dotKey =
+                  dotProps.payload?.weekKey ??
+                  dotProps.payload?.label ??
+                  `i${dotProps.index}`;
                 return (
                   <circle
+                    key={`engagement-${dotKey}-${dotProps.index}`}
                     cx={dotProps.cx}
                     cy={dotProps.cy}
                     r={3.5}

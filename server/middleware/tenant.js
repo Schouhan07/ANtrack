@@ -21,6 +21,25 @@ function resolveTenant(req, res, next) {
   }
 
   if (req.user.role === 'super_admin') {
+    if (req.actingUser) {
+      const allowed = req.actingUser.tenantIds || [];
+      if (allowed.length === 0) {
+        return res.status(403).json({ error: 'Selected user has no tenant access assigned' });
+      }
+      if (headerTenant) {
+        if (!isValidTenantId(headerTenant)) {
+          return res.status(400).json({ error: 'Invalid X-Tenant-Id' });
+        }
+        if (!allowed.includes(headerTenant)) {
+          return res.status(403).json({ error: 'Selected user does not have access to this tenant' });
+        }
+        req.tenantId = headerTenant;
+        return next();
+      }
+      req.tenantId = allowed[0];
+      return next();
+    }
+
     if (!headerTenant || !isValidTenantId(headerTenant)) {
       return res.status(400).json({
         error: 'X-Tenant-Id header required with a valid tenant slug (e.g. sgmy, kh, default)',

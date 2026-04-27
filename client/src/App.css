@@ -260,6 +260,51 @@ body {
   padding: 0 12px 10px;
 }
 
+.sidebar-tenant-switch {
+  padding: 0 12px 14px;
+}
+
+.sidebar-tenant-switch-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 8px;
+}
+
+.sidebar-tenant-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(15, 23, 42, 0.35);
+  color: #fff;
+  font-family: var(--font);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.sidebar-tenant-select:hover {
+  border-color: rgba(244, 63, 94, 0.35);
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.sidebar-tenant-select:focus-visible {
+  border-color: rgba(244, 63, 94, 0.55);
+  box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.2);
+}
+
+.sidebar-tenant-select option {
+  color: var(--ink);
+  background: var(--surface);
+}
+
 .sidebar a {
   color: rgba(255, 255, 255, 0.72);
   text-decoration: none;
@@ -610,6 +655,39 @@ button.sidebar-signout:hover {
 
 .auth-input-wrap {
   position: relative;
+}
+
+.auth-input-wrap--password .auth-input--password-toggle {
+  padding-right: 48px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.auth-password-toggle:hover {
+  color: var(--ink);
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.auth-password-toggle:focus-visible {
+  outline: 2px solid rgba(244, 63, 94, 0.45);
+  outline-offset: 2px;
 }
 
 .auth-input {

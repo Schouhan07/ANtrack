@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useTenantPath } from '../hooks/useTenantPath';
+import { fetchTenantsMeta, getAdminUser } from '../services/api';
 import {
   FiHome,
   FiUpload,
@@ -18,16 +19,113 @@ import {
   FiChevronRight,
 } from 'react-icons/fi';
 
+/** Preserve path after first URL segment when switching workspace (country) tenant. */
+function pathWithNewTenant(pathname, newTenantId) {
+  const parts = pathname.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+  if (parts.length === 0) return `/${newTenantId}`;
+  const rest = parts.slice(1);
+  return rest.length ? `/${newTenantId}/${rest.join('/')}` : `/${newTenantId}`;
+}
+
+function readStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem('antrack_user') || 'null');
+  } catch {
+    return null;
+  }
+}
+
 export default function Navbar({ expanded = true, onToggleExpanded = () => {} }) {
-  const { withTenant } = useTenantPath();
+  const { withTenant, asUser, tenant } = useTenantPath();
   const navigate = useNavigate();
-  const user = useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem('antrack_user') || 'null');
-    } catch {
-      return null;
-    }
+  const location = useLocation();
+  const [tenantsMeta, setTenantsMeta] = useState([]);
+  const [actingProfile, setActingProfile] = useState(null);
+  /** Bumped on cross-tab localStorage changes so we re-read `antrack_user`. */
+  const [userRevision, setUserRevision] = useState(0);
+  const actingProfileCacheRef = useRef({ asUserId: null, data: null });
+
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === 'antrack_user' || e.key === 'antrack_token') {
+        setUserRevision((n) => n + 1);
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
+
+  const user = useMemo(
+    () => readStoredUser(),
+    [userRevision, location.pathname]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchTenantsMeta()
+      .then((res) => {
+        if (!cancelled) setTenantsMeta(res.data.tenants || []);
+      })
+      .catch(() => {
+        if (!cancelled) setTenantsMeta([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (user?.role !== 'super_admin' || !asUser) {
+      setActingProfile(null);
+      actingProfileCacheRef.current = { asUserId: null, data: null };
+      return;
+    }
+    const cached = actingProfileCacheRef.current;
+    if (cached.asUserId === asUser && cached.data) {
+      setActingProfile(cached.data);
+      return;
+    }
+    let cancelled = false;
+    getAdminUser(asUser)
+      .then((res) => {
+        if (cancelled) return;
+        const data = res.data || null;
+        actingProfileCacheRef.current = { asUserId: asUser, data };
+        setActingProfile(data);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          actingProfileCacheRef.current = { asUserId: asUser, data: null };
+          setActingProfile(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.role, asUser]);
+
+  const tenantIdsForSwitch = useMemo(() => {
+    if (user?.role === 'super_admin' && asUser && actingProfile?.tenantIds?.length) {
+      return actingProfile.tenantIds;
+    }
+    if (user?.role !== 'super_admin' && Array.isArray(user?.tenantIds)) {
+      return user.tenantIds;
+    }
+    return [];
+  }, [user, asUser, actingProfile]);
+
+  const showTenantSwitcher =
+    tenantIdsForSwitch.length > 1 &&
+    (user?.role !== 'super_admin' || Boolean(asUser));
+
+  const tenantLabel = (id) => tenantsMeta.find((t) => t.id === id)?.label || id;
+
+  const onWorkspaceChange = (e) => {
+    const nextId = e.target.value;
+    if (!nextId || nextId === tenant) return;
+    const path = pathWithNewTenant(location.pathname, nextId);
+    navigate(`${path}${location.search || ''}`, { replace: true });
+  };
 
   const signOut = () => {
     localStorage.removeItem('antrack_token');
@@ -47,7 +145,33 @@ export default function Navbar({ expanded = true, onToggleExpanded = () => {} })
               <p className="sidebar-tagline">Influencer intelligence</p>
             </div>
 
+            {showTenantSwitcher && (
+              <div className="sidebar-tenant-switch">
+                <label htmlFor="sidebar-workspace-select" className="sidebar-tenant-switch-label">
+                  Country / region
+                </label>
+                <select
+                  id="sidebar-workspace-select"
+                  className="sidebar-tenant-select"
+                  value={tenantIdsForSwitch.includes(tenant) ? tenant : tenantIdsForSwitch[0]}
+                  onChange={onWorkspaceChange}
+                  aria-label="Switch country or region workspace"
+                >
+                  {tenantIdsForSwitch.map((id) => (
+                    <option key={id} value={id}>
+                      {tenantLabel(id)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="sidebar-section-label">Menu</div>
+            {user?.role === 'super_admin' && asUser && (
+              <div className="muted-caption" style={{ marginBottom: 8 }}>
+                Viewing as user context
+              </div>
+            )}
 
             <NavLink to={withTenant('/')} className={({ isActive }) => (isActive ? 'active' : '')} end>
               <FiHome size={18} />

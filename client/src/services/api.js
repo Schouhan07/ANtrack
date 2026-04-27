@@ -17,9 +17,33 @@ function tenantFromPath() {
   return seg;
 }
 
+function viewAsUserFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    const id = params.get('asUser');
+    return id ? String(id).trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function currentRole() {
+  try {
+    const raw = localStorage.getItem('antrack_user');
+    const user = raw ? JSON.parse(raw) : null;
+    return user?.role || null;
+  } catch {
+    return null;
+  }
+}
+
 API.interceptors.request.use((config) => {
   const tid = tenantFromPath();
   if (tid) config.headers['X-Tenant-Id'] = tid;
+  const asUser = viewAsUserFromUrl();
+  if (asUser && currentRole() === 'super_admin') {
+    config.headers['X-As-User-Id'] = asUser;
+  }
   const token = localStorage.getItem('antrack_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
@@ -29,6 +53,7 @@ export const loginRequest = (email, password) =>
   API.post('/auth/login', { email, password });
 export const fetchMe = () => API.get('/auth/me');
 export const listAdminUsers = () => API.get('/admin/users');
+export const getAdminUser = (id) => API.get(`/admin/users/${id}`);
 export const createAdminUser = (body) => API.post('/admin/users', body);
 export const updateAdminUser = (id, body) => API.patch(`/admin/users/${id}`, body);
 export const fetchTenantsMeta = () => API.get('/tenants');

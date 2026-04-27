@@ -71,6 +71,7 @@ export default function DailyViewsChart() {
             dot={(p) =>
               p.payload?.interpolated || p.cx == null ? null : (
                 <circle
+                  key={`dv-views-${p.payload?.date ?? p.index}`}
                   cx={p.cx}
                   cy={p.cy}
                   r={3.5}
@@ -93,6 +94,7 @@ export default function DailyViewsChart() {
             dot={(p) =>
               p.payload?.interpolated || p.cx == null ? null : (
                 <circle
+                  key={`dv-likes-${p.payload?.date ?? p.index}`}
                   cx={p.cx}
                   cy={p.cy}
                   r={3.5}

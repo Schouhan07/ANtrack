@@ -29,6 +29,31 @@ exports.listUsers = async (_req, res) => {
   }
 };
 
+exports.getUser = async (req, res) => {
+  try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    const user = await User.findById(req.params.id).select('-passwordHash').lean();
+    if (!user) return res.status(404).json({ error: 'Not found' });
+
+    res.json({
+      id: user._id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      tenantIds: user.tenantIds || [],
+      tenantLabels: (user.tenantIds || []).map((id) => ({ id, label: getTenantLabel(id) })),
+      active: user.active,
+      lastLoginAt: user.lastLoginAt,
+      createdAt: user.createdAt,
+      tenants: listTenants(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 exports.createUser = async (req, res) => {
   try {
     const email = String(req.body.email || '').toLowerCase().trim();

@@ -2,9 +2,10 @@
  * Registry of tenant slugs (URL segment / X-Tenant-Id). Add entries when onboarding a region.
  */
 const TENANTS = [
-  { id: 'default', label: 'Default', regions: 'Legacy / unassigned' },
+  // { id: 'default', label: 'Default', regions: 'Legacy / unassigned' },
   { id: 'sgmy', label: 'Singapore & Malaysia', regions: 'SG, MY' },
   { id: 'kh', label: 'Cambodia', regions: 'KH' },
+  {id:'vietnam', label: 'Vietnam', regions: 'VN'}
 ];
 
 const IDS = new Set(TENANTS.map((t) => t.id));
